@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Live Calendar - Daily Objectives & Planner</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app">
+    <!-- Header -->
+    <header class="header">
+      <h1>My Calendar</h1>
+      <div class="current-date" id="currentDate"></div>
+    </header>
+
+    <div class="main-layout">
+      <!-- Left Sidebar: Daily Objectives -->
+      <aside class="sidebar daily-panel">
+        <h2>Today's Objectives</h2>
+        <div class="date-label" id="todayLabel"></div>
+        <ul class="objectives-list" id="dailyObjectives">
+          <li class="empty-state">No objectives for today. Use the chat to add some!</li>
+        </ul>
+      </aside>
+
+      <!-- Center: Calendar -->
+      <main class="calendar-container">
+        <!-- View Tabs -->
+        <div class="view-tabs">
+          <button class="tab active" data-view="month" id="monthTab">Month</button>
+          <button class="tab" data-view="week" id="weekTab">Week</button>
+        </div>
+
+        <!-- Month Navigation -->
+        <div class="calendar-nav">
+          <button id="prevBtn">&larr;</button>
+          <h3 id="monthYear"></h3>
+          <button id="nextBtn">&rarr;</button>
+        </div>
+
+        <!-- Month View -->
+        <div class="calendar-view" id="monthView">
+          <div class="calendar-grid">
+            <div class="day-header">Sun</div>
+            <div class="day-header">Mon</div>
+            <div class="day-header">Tue</div>
+            <div class="day-header">Wed</div>
+            <div class="day-header">Thu</div>
+            <div class="day-header">Fri</div>
+            <div class="day-header">Sat</div>
+          </div>
+          <div class="calendar-days" id="calendarDays"></div>
+        </div>
+
+        <!-- Week View -->
+        <div class="calendar-view hidden" id="weekView">
+          <div class="week-grid" id="weekGrid"></div>
+        </div>
+      </main>
+
+      <!-- Right Sidebar: Monthly Horizon -->
+      <aside class="sidebar horizon-panel">
+        <h2>On the Horizon</h2>
+        <div class="horizon-label" id="horizonLabel"></div>
+        <ul class="horizon-list" id="horizonList">
+          <li class="empty-state">Nothing upcoming this month yet.</li>
+        </ul>
+      </aside>
+    </div>
+
+    <!-- Chatbox -->
+    <div class="chatbox">
+      <div class="chat-messages" id="chatMessages">
+        <div class="chat-message bot">
+          <span>Hi! Tell me what to add to your calendar. Try things like:<br>
+          <em>"Meeting with team on March 25 at 2pm"</em><br>
+          <em>"Finish report by Friday"</em><br>
+          <em>"Gym every Monday and Wednesday"</em></span>
+        </div>
+      </div>
+      <div class="chat-input-area">
+        <input type="text" id="chatInput" placeholder="Type an event or objective..." autocomplete="off">
+        <button id="chatSend">Send</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Event Modal -->
+  <div class="modal-overlay hidden" id="modalOverlay">
+    <div class="modal">
+      <h3 id="modalTitle">Add Event</h3>
+      <form id="eventForm">
+        <label>Title
+          <input type="text" id="eventTitle" required>
+        </label>
+        <label>Date
+          <input type="date" id="eventDate" required>
+        </label>
+        <label>Time (optional)
+          <input type="time" id="eventTime">
+        </label>
+        <label>Category
+          <select id="eventCategory">
+            <option value="objective">Daily Objective</option>
+            <option value="meeting">Meeting</option>
+            <option value="deadline">Deadline</option>
+            <option value="reminder">Reminder</option>
+            <option value="personal">Personal</option>
+          </select>
+        </label>
+        <div class="modal-actions">
+          <button type="button" id="modalCancel">Cancel</button>
+          <button type="submit">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
