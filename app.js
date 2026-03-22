@@ -1,9 +1,12 @@
 // ===== State =====
 const state = {
   events: JSON.parse(localStorage.getItem('calendarEvents') || '[]'),
+  birthdays: JSON.parse(localStorage.getItem('calendarBirthdays') || '[]'),
+  completedEvents: JSON.parse(localStorage.getItem('calendarCompleted') || '{}'),
   currentDate: new Date(),
   selectedDate: new Date(),
   view: 'month',
+  chatCollapsed: false,
 };
 
 // ===== DOM Elements =====
@@ -34,8 +37,33 @@ const els = {
   eventDate: $('#eventDate'),
   eventTime: $('#eventTime'),
   eventCategory: $('#eventCategory'),
+  eventRecurring: $('#eventRecurring'),
+  recurringOption: $('#recurringOption'),
   modalCancel: $('#modalCancel'),
   modalTitle: $('#modalTitle'),
+  todayBtn: $('#todayBtn'),
+  overdueSection: $('#overdueSection'),
+  overdueList: $('#overdueList'),
+  progressBar: $('#progressBar'),
+  progressText: $('#progressText'),
+  progressContainer: $('#progressContainer'),
+  overdueCount: $('#overdueCount'),
+  todayCount: $('#todayCount'),
+  doneCount: $('#doneCount'),
+  upcomingCount: $('#upcomingCount'),
+  statOverdue: $('#statOverdue'),
+  chatbox: $('#chatbox'),
+  chatToggle: $('#chatToggle'),
+  chatBody: $('#chatBody'),
+  chatArrow: $('#chatArrow'),
+  birthdayUpcoming: $('#birthdayUpcoming'),
+  addBirthdayBtn: $('#addBirthdayBtn'),
+  birthdayModalOverlay: $('#birthdayModalOverlay'),
+  birthdayForm: $('#birthdayForm'),
+  birthdayName: $('#birthdayName'),
+  birthdayDate: $('#birthdayDate'),
+  birthdayType: $('#birthdayType'),
+  birthdayCancel: $('#birthdayCancel'),
 };
 
 // ===== Helpers =====
@@ -78,8 +106,64 @@ function saveEvents() {
   localStorage.setItem('calendarEvents', JSON.stringify(state.events));
 }
 
+function saveBirthdays() {
+  localStorage.setItem('calendarBirthdays', JSON.stringify(state.birthdays));
+}
+
+function saveCompleted() {
+  localStorage.setItem('calendarCompleted', JSON.stringify(state.completedEvents));
+}
+
 function generateId() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+}
+
+function isEventCompleted(eventId) {
+  return !!state.completedEvents[eventId];
+}
+
+function toggleEventCompleted(eventId) {
+  if (state.completedEvents[eventId]) {
+    delete state.completedEvents[eventId];
+  } else {
+    state.completedEvents[eventId] = true;
+  }
+  saveCompleted();
+  render();
+}
+
+function getOverdueEvents() {
+  const todayStr = formatDate(new Date());
+  return state.events.filter(e => e.date < todayStr && !isEventCompleted(e.id));
+}
+
+function getBirthdaysForDate(dateStr) {
+  const d = new Date(dateStr + 'T00:00:00');
+  const month = d.getMonth() + 1;
+  const day = d.getDate();
+  return state.birthdays.filter(b => {
+    const bd = new Date(b.date + 'T00:00:00');
+    return (bd.getMonth() + 1) === month && bd.getDate() === day;
+  });
+}
+
+function getUpcomingBirthdays(limit) {
+  const today = new Date();
+  const thisYear = today.getFullYear();
+
+  const withNext = state.birthdays.map(b => {
+    const bd = new Date(b.date + 'T00:00:00');
+    let next = new Date(thisYear, bd.getMonth(), bd.getDate());
+    if (next < today && !sameDay(next, today)) {
+      next = new Date(thisYear + 1, bd.getMonth(), bd.getDate());
+    }
+    const diffMs = next - today;
+    const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+    return { ...b, nextDate: next, daysUntil: diffDays };
+  });
+
+  withNext.sort((a, b) => a.daysUntil - b.daysUntil);
+  return withNext.slice(0, limit || 5);
 }
 
 // ===== Rendering =====
@@ -89,8 +173,11 @@ function render() {
   els.todayLabel.textContent = formatDisplay(today);
   els.monthYear.textContent = formatMonthYear(state.currentDate);
 
+  renderStats(today);
+  renderOverdue();
   renderDailyObjectives(today);
   renderHorizon(today);
+  renderBirthdays();
 
   if (state.view === 'month') {
     renderMonthView();
@@ -99,29 +186,112 @@ function render() {
   }
 }
 
+function renderStats(today) {
+  const todayStr = formatDate(today);
+  const todayEvents = getEventsForDate(todayStr);
+  const overdueEvents = getOverdueEvents();
+  const completedToday = todayEvents.filter(e => isEventCompleted(e.id)).length;
+
+  // This week events
+  const weekStart = new Date(today);
+  weekStart.setDate(today.getDate() - today.getDay());
+  const weekEnd = new Date(weekStart);
+  weekEnd.setDate(weekStart.getDate() + 6);
+  const weekStartStr = formatDate(weekStart);
+  const weekEndStr = formatDate(weekEnd);
+  const weekEvents = state.events.filter(e => e.date >= weekStartStr && e.date <= weekEndStr).length;
+
+  els.todayCount.textContent = todayEvents.length;
+  els.doneCount.textContent = completedToday;
+  els.upcomingCount.textContent = weekEvents;
+  els.overdueCount.textContent = overdueEvents.length;
+
+  if (overdueEvents.length > 0) {
+    els.statOverdue.classList.remove('hidden');
+  } else {
+    els.statOverdue.classList.add('hidden');
+  }
+}
+
+function renderOverdue() {
+  const overdueEvents = getOverdueEvents();
+
+  if (overdueEvents.length === 0) {
+    els.overdueSection.classList.add('hidden');
+    return;
+  }
+
+  els.overdueSection.classList.remove('hidden');
+
+  // Group by date
+  const groups = {};
+  overdueEvents.forEach(e => {
+    if (!groups[e.date]) groups[e.date] = [];
+    groups[e.date].push(e);
+  });
+
+  let html = '';
+  Object.keys(groups).sort().forEach(dateStr => {
+    const d = new Date(dateStr + 'T00:00:00');
+    groups[dateStr].forEach(e => {
+      html += `<li class="cat-${e.category}">
+        <input type="checkbox" class="event-checkbox" data-id="${e.id}" ${isEventCompleted(e.id) ? 'checked' : ''}>
+        ${e.time ? `<span class="event-item-time">${formatTime(e.time)}</span>` : ''}
+        <span class="event-item-title">${escapeHtml(e.title)}</span>
+        <span class="overdue-date">${formatShortDate(d)}</span>
+        <button class="event-item-delete" data-id="${e.id}" title="Delete">&times;</button>
+      </li>`;
+    });
+  });
+
+  els.overdueList.innerHTML = html;
+  attachEventListeners(els.overdueList);
+}
+
 function renderDailyObjectives(today) {
   const todayStr = formatDate(today);
   const events = getEventsForDate(todayStr);
 
-  if (events.length === 0) {
+  // Progress bar
+  const total = events.length;
+  const completed = events.filter(e => isEventCompleted(e.id)).length;
+  const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
+  els.progressBar.style.width = pct + '%';
+  els.progressText.textContent = total > 0 ? `${completed} / ${total} done` : 'No tasks';
+  els.progressContainer.style.display = total > 0 ? '' : 'none';
+
+  // Today's birthdays
+  const todayBirthdays = getBirthdaysForDate(todayStr);
+
+  if (events.length === 0 && todayBirthdays.length === 0) {
     els.dailyObjectives.innerHTML = '<li class="empty-state">No objectives for today. Use the chat to add some!</li>';
     return;
   }
 
-  els.dailyObjectives.innerHTML = events.map(e => `
-    <li class="cat-${e.category}">
+  let html = '';
+
+  // Show birthdays first
+  todayBirthdays.forEach(b => {
+    const bd = new Date(b.date + 'T00:00:00');
+    const age = today.getFullYear() - bd.getFullYear();
+    const icon = b.type === 'anniversary' ? '💍' : '🎂';
+    html += `<li class="cat-birthday">
+      <span class="event-item-title">${icon} ${escapeHtml(b.name)}${age > 0 ? ` (${age} ${b.type === 'anniversary' ? 'years' : 'years old'})` : ''}</span>
+    </li>`;
+  });
+
+  html += events.map(e => {
+    const completed = isEventCompleted(e.id);
+    return `<li class="cat-${e.category} ${completed ? 'event-item-completed' : ''}">
+      <input type="checkbox" class="event-checkbox" data-id="${e.id}" ${completed ? 'checked' : ''}>
       ${e.time ? `<span class="event-item-time">${formatTime(e.time)}</span>` : ''}
       <span class="event-item-title">${escapeHtml(e.title)}</span>
       <button class="event-item-delete" data-id="${e.id}" title="Delete">&times;</button>
-    </li>
-  `).join('');
+    </li>`;
+  }).join('');
 
-  els.dailyObjectives.querySelectorAll('.event-item-delete').forEach(btn => {
-    btn.addEventListener('click', (ev) => {
-      ev.stopPropagation();
-      deleteEvent(btn.dataset.id);
-    });
-  });
+  els.dailyObjectives.innerHTML = html;
+  attachEventListeners(els.dailyObjectives);
 }
 
 function renderHorizon(today) {
@@ -150,9 +320,21 @@ function renderHorizon(today) {
   let html = '';
   Object.keys(groups).sort().forEach(dateStr => {
     const d = new Date(dateStr + 'T00:00:00');
+    const birthdays = getBirthdaysForDate(dateStr);
+
     html += `<div class="horizon-date-group"><div class="horizon-date-label">${formatShortDate(d)}</div>`;
+
+    birthdays.forEach(b => {
+      const icon = b.type === 'anniversary' ? '💍' : '🎂';
+      html += `<li class="cat-birthday">
+        <span class="event-item-title">${icon} ${escapeHtml(b.name)}</span>
+      </li>`;
+    });
+
     groups[dateStr].forEach(e => {
-      html += `<li class="cat-${e.category}">
+      const completed = isEventCompleted(e.id);
+      html += `<li class="cat-${e.category} ${completed ? 'event-item-completed' : ''}">
+        <input type="checkbox" class="event-checkbox" data-id="${e.id}" ${completed ? 'checked' : ''}>
         ${e.time ? `<span class="event-item-time">${formatTime(e.time)}</span>` : ''}
         <span class="event-item-title">${escapeHtml(e.title)}</span>
         <button class="event-item-delete" data-id="${e.id}" title="Delete">&times;</button>
@@ -162,7 +344,55 @@ function renderHorizon(today) {
   });
 
   els.horizonList.innerHTML = html;
-  els.horizonList.querySelectorAll('.event-item-delete').forEach(btn => {
+  attachEventListeners(els.horizonList);
+}
+
+function renderBirthdays() {
+  const upcoming = getUpcomingBirthdays(5);
+
+  if (upcoming.length === 0) {
+    els.birthdayUpcoming.innerHTML = '<span class="empty-state-inline">No upcoming celebrations</span>';
+    return;
+  }
+
+  let html = '';
+  upcoming.forEach(b => {
+    const icon = b.type === 'anniversary' ? '💍' : '🎂';
+    const bd = new Date(b.date + 'T00:00:00');
+    const dateLabel = b.nextDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    let countdown;
+    if (b.daysUntil === 0) countdown = 'Today!';
+    else if (b.daysUntil === 1) countdown = 'Tomorrow';
+    else countdown = `${b.daysUntil} days`;
+
+    html += `<div class="birthday-item">
+      <span class="birthday-icon">${icon}</span>
+      <div class="birthday-info">
+        <div class="birthday-name">${escapeHtml(b.name)}</div>
+        <div class="birthday-date-text">${dateLabel}</div>
+      </div>
+      <span class="birthday-countdown">${countdown}</span>
+      <button class="birthday-delete" data-id="${b.id}" title="Delete">&times;</button>
+    </div>`;
+  });
+
+  els.birthdayUpcoming.innerHTML = html;
+  els.birthdayUpcoming.querySelectorAll('.birthday-delete').forEach(btn => {
+    btn.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      deleteBirthday(btn.dataset.id);
+    });
+  });
+}
+
+function attachEventListeners(container) {
+  container.querySelectorAll('.event-checkbox').forEach(cb => {
+    cb.addEventListener('change', (ev) => {
+      ev.stopPropagation();
+      toggleEventCompleted(cb.dataset.id);
+    });
+  });
+  container.querySelectorAll('.event-item-delete').forEach(btn => {
     btn.addEventListener('click', (ev) => {
       ev.stopPropagation();
       deleteEvent(btn.dataset.id);
@@ -177,16 +407,16 @@ function renderMonthView() {
   const lastDay = new Date(year, month + 1, 0);
   const startDay = firstDay.getDay();
   const today = new Date();
+  const todayStr = formatDate(today);
 
   let html = '';
 
   // Previous month padding
-  const prevMonthLast = new Date(year, month, 0);
   for (let i = startDay - 1; i >= 0; i--) {
     const d = new Date(year, month, -i);
     const dateStr = formatDate(d);
     const events = getEventsForDate(dateStr);
-    html += buildDayCell(d, events, true, sameDay(d, today));
+    html += buildDayCell(d, events, true, sameDay(d, today), todayStr);
   }
 
   // Current month
@@ -194,7 +424,7 @@ function renderMonthView() {
     const d = new Date(year, month, day);
     const dateStr = formatDate(d);
     const events = getEventsForDate(dateStr);
-    html += buildDayCell(d, events, false, sameDay(d, today));
+    html += buildDayCell(d, events, false, sameDay(d, today), todayStr);
   }
 
   // Next month padding
@@ -204,12 +434,11 @@ function renderMonthView() {
     const d = new Date(year, month + 1, i);
     const dateStr = formatDate(d);
     const events = getEventsForDate(dateStr);
-    html += buildDayCell(d, events, true, false);
+    html += buildDayCell(d, events, true, false, todayStr);
   }
 
   els.calendarDays.innerHTML = html;
 
-  // Add click handlers
   els.calendarDays.querySelectorAll('.calendar-day').forEach(cell => {
     cell.addEventListener('click', () => {
       state.selectedDate = new Date(cell.dataset.date + 'T00:00:00');
@@ -218,29 +447,52 @@ function renderMonthView() {
   });
 }
 
-function buildDayCell(date, events, otherMonth, isToday) {
+function buildDayCell(date, events, otherMonth, isToday, todayStr) {
   const dateStr = formatDate(date);
   const classes = ['calendar-day'];
   if (otherMonth) classes.push('other-month');
   if (isToday) classes.push('today');
 
+  const hasOverdue = !otherMonth && dateStr < todayStr && events.some(e => !isEventCompleted(e.id));
+  if (hasOverdue) classes.push('has-overdue');
+
+  const birthdays = getBirthdaysForDate(dateStr);
+
+  let badgeHtml = '';
+  if (hasOverdue) {
+    badgeHtml += `<span class="day-badge overdue-badge">!</span>`;
+  }
+  if (birthdays.length > 0) {
+    badgeHtml += `<span class="day-badge birthday-badge">🎂</span>`;
+  }
+
   let eventsHtml = '';
-  const maxShow = 3;
-  events.slice(0, maxShow).forEach(e => {
-    eventsHtml += `<div class="day-event cat-${e.category}">${e.time ? formatTime(e.time) + ' ' : ''}${escapeHtml(e.title)}</div>`;
+
+  // Show birthday events
+  birthdays.forEach(b => {
+    const icon = b.type === 'anniversary' ? '💍' : '🎂';
+    eventsHtml += `<div class="day-event cat-birthday">${icon} ${escapeHtml(b.name)}</div>`;
   });
+
+  const maxShow = birthdays.length > 0 ? 2 : 3;
+  events.slice(0, maxShow).forEach(e => {
+    const completed = isEventCompleted(e.id);
+    eventsHtml += `<div class="day-event cat-${e.category} ${completed ? 'completed-event' : ''}">${e.time ? formatTime(e.time) + ' ' : ''}${escapeHtml(e.title)}</div>`;
+  });
+  const totalHidden = events.length - maxShow + (birthdays.length > 0 ? 0 : 0);
   if (events.length > maxShow) {
     eventsHtml += `<div class="day-event-more">+${events.length - maxShow} more</div>`;
   }
 
   return `<div class="${classes.join(' ')}" data-date="${dateStr}">
-    <div class="day-number">${date.getDate()}</div>
+    <div class="day-number">${date.getDate()} ${badgeHtml}</div>
     <div class="day-events">${eventsHtml}</div>
   </div>`;
 }
 
 function renderWeekView() {
   const today = new Date();
+  const todayStr = formatDate(today);
   const curr = new Date(state.currentDate);
   const dayOfWeek = curr.getDay();
   const sunday = new Date(curr);
@@ -252,20 +504,35 @@ function renderWeekView() {
     d.setDate(sunday.getDate() + i);
     const dateStr = formatDate(d);
     const events = getEventsForDate(dateStr);
+    const birthdays = getBirthdaysForDate(dateStr);
     const isToday = sameDay(d, today);
+    const hasOverdue = dateStr < todayStr && events.some(e => !isEventCompleted(e.id));
     const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
-    html += `<div class="week-day-row${isToday ? ' today' : ''}" data-date="${dateStr}">
+    let rowClass = 'week-day-row';
+    if (isToday) rowClass += ' today';
+    else if (hasOverdue) rowClass += ' has-overdue';
+
+    let eventsHtml = '';
+    birthdays.forEach(b => {
+      const icon = b.type === 'anniversary' ? '💍' : '🎂';
+      eventsHtml += `<div class="week-event cat-birthday">${icon} ${escapeHtml(b.name)}</div>`;
+    });
+
+    eventsHtml += events.map(e => {
+      const completed = isEventCompleted(e.id);
+      return `<div class="week-event cat-${e.category} ${completed ? 'completed-event' : ''}">
+        ${e.time ? `<span class="week-event-time">${formatTime(e.time)}</span>` : ''}
+        ${escapeHtml(e.title)}
+      </div>`;
+    }).join('');
+
+    html += `<div class="${rowClass}" data-date="${dateStr}">
       <div class="week-day-label">
         <span class="week-day-name">${dayNames[i]}</span>
         <span class="week-day-date">${d.getDate()}</span>
       </div>
-      <div class="week-day-events">
-        ${events.map(e => `<div class="week-event cat-${e.category}">
-          ${e.time ? `<span class="week-event-time">${formatTime(e.time)}</span>` : ''}
-          ${escapeHtml(e.title)}
-        </div>`).join('')}
-      </div>
+      <div class="week-day-events">${eventsHtml}</div>
     </div>`;
   }
 
@@ -286,7 +553,21 @@ function addEvent(event) {
 
 function deleteEvent(id) {
   state.events = state.events.filter(e => e.id !== id);
+  delete state.completedEvents[id];
   saveEvents();
+  saveCompleted();
+  render();
+}
+
+function addBirthday(birthday) {
+  state.birthdays.push(birthday);
+  saveBirthdays();
+  render();
+}
+
+function deleteBirthday(id) {
+  state.birthdays = state.birthdays.filter(b => b.id !== id);
+  saveBirthdays();
   render();
 }
 
@@ -296,6 +577,7 @@ function openModal(dateStr) {
   els.eventTitle.value = '';
   els.eventTime.value = '';
   els.eventCategory.value = 'objective';
+  els.recurringOption.classList.add('hidden');
   els.modalTitle.textContent = 'Add Event';
   els.modalOverlay.classList.remove('hidden');
   els.eventTitle.focus();
@@ -305,24 +587,46 @@ function closeModal() {
   els.modalOverlay.classList.add('hidden');
 }
 
+function openBirthdayModal() {
+  els.birthdayName.value = '';
+  els.birthdayDate.value = '';
+  els.birthdayType.value = 'birthday';
+  els.birthdayModalOverlay.classList.remove('hidden');
+  els.birthdayName.focus();
+}
+
+function closeBirthdayModal() {
+  els.birthdayModalOverlay.classList.add('hidden');
+}
+
 // ===== Chat Parser =====
 function parseChat(text) {
-  const result = { title: '', date: null, time: null, category: 'objective' };
+  const result = { title: '', date: null, time: null, category: 'objective', isBirthday: false, birthdayType: 'birthday' };
   const lower = text.toLowerCase();
 
-  // Detect category
-  if (lower.includes('meeting') || lower.includes('meet with') || lower.includes('call with'))
-    result.category = 'meeting';
-  else if (lower.includes('deadline') || lower.includes('due') || lower.includes('finish') || lower.includes('submit'))
-    result.category = 'deadline';
-  else if (lower.includes('remind') || lower.includes('remember') || lower.includes("don't forget"))
-    result.category = 'reminder';
-  else if (lower.includes('gym') || lower.includes('workout') || lower.includes('dinner') ||
-           lower.includes('lunch') || lower.includes('birthday') || lower.includes('party') ||
-           lower.includes('doctor') || lower.includes('dentist') || lower.includes('haircut'))
-    result.category = 'personal';
+  // Detect birthday/anniversary
+  if (lower.includes('birthday') || lower.includes('bday') || lower.includes('anniversary')) {
+    result.isBirthday = true;
+    result.birthdayType = lower.includes('anniversary') ? 'anniversary' : 'birthday';
+  }
 
-  // Parse time - look for patterns like "at 2pm", "at 14:00", "at 2:30 pm"
+  // Detect category
+  if (!result.isBirthday) {
+    if (lower.includes('meeting') || lower.includes('meet with') || lower.includes('call with'))
+      result.category = 'meeting';
+    else if (lower.includes('deadline') || lower.includes('due') || lower.includes('finish') || lower.includes('submit'))
+      result.category = 'deadline';
+    else if (lower.includes('remind') || lower.includes('remember') || lower.includes("don't forget"))
+      result.category = 'reminder';
+    else if (lower.includes('gym') || lower.includes('workout') || lower.includes('dinner') ||
+             lower.includes('lunch') || lower.includes('party') ||
+             lower.includes('doctor') || lower.includes('dentist') || lower.includes('haircut'))
+      result.category = 'personal';
+  } else {
+    result.category = 'birthday';
+  }
+
+  // Parse time
   const timePatterns = [
     /\bat\s+(\d{1,2}):(\d{2})\s*(am|pm)/i,
     /\bat\s+(\d{1,2})\s*(am|pm)/i,
@@ -350,18 +654,13 @@ function parseChat(text) {
   const today = new Date();
   const todayStr = formatDate(today);
 
-  // "today"
   if (lower.includes('today')) {
     result.date = todayStr;
-  }
-  // "tomorrow"
-  else if (lower.includes('tomorrow')) {
+  } else if (lower.includes('tomorrow')) {
     const d = new Date(today);
     d.setDate(d.getDate() + 1);
     result.date = formatDate(d);
-  }
-  // Day names: "on Monday", "next Friday", etc.
-  else {
+  } else {
     const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
     const dayMatch = lower.match(new RegExp(`\\b(next\\s+)?(${dayNames.join('|')})\\b`));
     if (dayMatch) {
@@ -375,7 +674,7 @@ function parseChat(text) {
     }
   }
 
-  // Explicit dates: "March 25", "March 25th", "3/25", "2026-03-25"
+  // Explicit dates
   const monthNames = ['january', 'february', 'march', 'april', 'may', 'june',
     'july', 'august', 'september', 'october', 'november', 'december'];
   const monthPattern = new RegExp(`\\b(${monthNames.join('|')})\\s+(\\d{1,2})(?:st|nd|rd|th)?(?:\\s*,?\\s*(\\d{4}))?`, 'i');
@@ -387,7 +686,7 @@ function parseChat(text) {
     result.date = `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
   }
 
-  // Numeric date: "3/25" or "03/25"
+  // Numeric date
   const numDateMatch = text.match(/\b(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b/);
   if (numDateMatch && !result.date) {
     const m = parseInt(numDateMatch[1]);
@@ -397,14 +696,13 @@ function parseChat(text) {
     result.date = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
   }
 
-  // Default to today if no date found
   if (!result.date) {
     result.date = todayStr;
   }
 
-  // Clean title - remove date/time fragments
+  // Clean title
   let title = text;
-  // Remove common filler phrases
+  title = title.replace(/\b(birthday|bday|anniversary)\s*[:;]?\s*/gi, '');
   title = title.replace(/\b(on|at|by|for|next|this)\s+(sunday|monday|tuesday|wednesday|thursday|friday|saturday)/gi, '');
   title = title.replace(/\b(today|tomorrow)\b/gi, '');
   title = title.replace(monthPattern, '');
@@ -413,7 +711,6 @@ function parseChat(text) {
   title = title.replace(/\b\d{1,2}(:\d{2})?\s*(am|pm)\b/gi, '');
   title = title.replace(/\s{2,}/g, ' ').trim();
 
-  // Capitalize first letter
   if (title) {
     title = title.charAt(0).toUpperCase() + title.slice(1);
   }
@@ -425,32 +722,44 @@ function parseChat(text) {
 function handleChat(text) {
   if (!text.trim()) return;
 
-  // Add user message
   addChatMessage(text, 'user');
-
-  // Parse
   const parsed = parseChat(text);
-  const event = {
-    id: generateId(),
-    title: parsed.title,
-    date: parsed.date,
-    time: parsed.time,
-    category: parsed.category,
-  };
 
-  addEvent(event);
+  if (parsed.isBirthday) {
+    const birthday = {
+      id: generateId(),
+      name: parsed.title,
+      date: parsed.date,
+      type: parsed.birthdayType,
+    };
+    addBirthday(birthday);
 
-  // Build response
-  const dateObj = new Date(event.date + 'T00:00:00');
-  const dateDisplay = formatDisplay(dateObj);
-  const timeDisplay = event.time ? ` at ${formatTime(event.time)}` : '';
-  const categoryLabels = {
-    objective: 'objective', meeting: 'meeting', deadline: 'deadline',
-    reminder: 'reminder', personal: 'personal event'
-  };
+    const dateObj = new Date(birthday.date + 'T00:00:00');
+    const dateDisplay = dateObj.toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
+    const response = `Added "${birthday.name}" as a ${birthday.type} on ${dateDisplay}. I'll remind you every year!`;
+    addChatMessage(response, 'bot');
+  } else {
+    const event = {
+      id: generateId(),
+      title: parsed.title,
+      date: parsed.date,
+      time: parsed.time,
+      category: parsed.category,
+    };
 
-  const response = `Added "${event.title}" as a ${categoryLabels[event.category]} on ${dateDisplay}${timeDisplay}.`;
-  addChatMessage(response, 'bot');
+    addEvent(event);
+
+    const dateObj = new Date(event.date + 'T00:00:00');
+    const dateDisplay = formatDisplay(dateObj);
+    const timeDisplay = event.time ? ` at ${formatTime(event.time)}` : '';
+    const categoryLabels = {
+      objective: 'objective', meeting: 'meeting', deadline: 'deadline',
+      reminder: 'reminder', personal: 'personal event'
+    };
+
+    const response = `Added "${event.title}" as a ${categoryLabels[event.category]} on ${dateDisplay}${timeDisplay}.`;
+    addChatMessage(response, 'bot');
+  }
 
   els.chatInput.value = '';
 }
@@ -506,23 +815,60 @@ els.weekTab.addEventListener('click', () => {
   render();
 });
 
+// Today button
+els.todayBtn.addEventListener('click', () => {
+  state.currentDate = new Date();
+  render();
+});
+
+// Chat toggle
+els.chatToggle.addEventListener('click', () => {
+  state.chatCollapsed = !state.chatCollapsed;
+  els.chatbox.classList.toggle('collapsed', state.chatCollapsed);
+});
+
+// Chat
 els.chatSend.addEventListener('click', () => handleChat(els.chatInput.value));
 els.chatInput.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') handleChat(els.chatInput.value);
 });
 
+// Event form
+els.eventCategory.addEventListener('change', () => {
+  if (els.eventCategory.value === 'birthday') {
+    els.recurringOption.classList.remove('hidden');
+  } else {
+    els.recurringOption.classList.add('hidden');
+  }
+});
+
 els.eventForm.addEventListener('submit', (e) => {
   e.preventDefault();
-  const event = {
-    id: generateId(),
-    title: els.eventTitle.value.trim(),
-    date: els.eventDate.value,
-    time: els.eventTime.value || null,
-    category: els.eventCategory.value,
-  };
-  if (event.title) {
-    addEvent(event);
-    closeModal();
+  const category = els.eventCategory.value;
+
+  if (category === 'birthday') {
+    const birthday = {
+      id: generateId(),
+      name: els.eventTitle.value.trim(),
+      date: els.eventDate.value,
+      type: 'birthday',
+    };
+    if (birthday.name) {
+      addBirthday(birthday);
+      closeModal();
+    }
+  } else {
+    const event = {
+      id: generateId(),
+      title: els.eventTitle.value.trim(),
+      date: els.eventDate.value,
+      time: els.eventTime.value || null,
+      category: category,
+    };
+    if (event.title) {
+      addEvent(event);
+      closeModal();
+    }
   }
 });
 
@@ -531,9 +877,34 @@ els.modalOverlay.addEventListener('click', (e) => {
   if (e.target === els.modalOverlay) closeModal();
 });
 
-// Close modal on Escape
+// Birthday modal
+els.addBirthdayBtn.addEventListener('click', openBirthdayModal);
+
+els.birthdayForm.addEventListener('submit', (e) => {
+  e.preventDefault();
+  const birthday = {
+    id: generateId(),
+    name: els.birthdayName.value.trim(),
+    date: els.birthdayDate.value,
+    type: els.birthdayType.value,
+  };
+  if (birthday.name && birthday.date) {
+    addBirthday(birthday);
+    closeBirthdayModal();
+  }
+});
+
+els.birthdayCancel.addEventListener('click', closeBirthdayModal);
+els.birthdayModalOverlay.addEventListener('click', (e) => {
+  if (e.target === els.birthdayModalOverlay) closeBirthdayModal();
+});
+
+// Close modals on Escape
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') closeModal();
+  if (e.key === 'Escape') {
+    closeModal();
+    closeBirthdayModal();
+  }
 });
 
 // ===== Live Clock Update =====

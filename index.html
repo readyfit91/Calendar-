@@ -10,26 +10,69 @@
   <div class="app">
     <!-- Header -->
     <header class="header">
-      <h1>My Calendar</h1>
-      <div class="current-date" id="currentDate"></div>
+      <div class="header-left">
+        <h1>My Calendar</h1>
+        <div class="current-date" id="currentDate"></div>
+      </div>
+      <div class="header-stats" id="headerStats">
+        <div class="stat-pill stat-overdue" id="statOverdue" title="Overdue tasks">
+          <span class="stat-icon">!</span>
+          <span class="stat-count" id="overdueCount">0</span>
+          <span class="stat-label">Overdue</span>
+        </div>
+        <div class="stat-pill stat-today" id="statToday" title="Today's tasks">
+          <span class="stat-count" id="todayCount">0</span>
+          <span class="stat-label">Today</span>
+        </div>
+        <div class="stat-pill stat-done" id="statDone" title="Completed today">
+          <span class="stat-count" id="doneCount">0</span>
+          <span class="stat-label">Done</span>
+        </div>
+        <div class="stat-pill stat-upcoming" id="statUpcoming" title="This week">
+          <span class="stat-count" id="upcomingCount">0</span>
+          <span class="stat-label">This Week</span>
+        </div>
+      </div>
     </header>
 
     <div class="main-layout">
-      <!-- Left Sidebar: Daily Objectives -->
+      <!-- Left Sidebar: Daily Objectives + Overdue -->
       <aside class="sidebar daily-panel">
-        <h2>Today's Objectives</h2>
+        <!-- Overdue Section -->
+        <div class="overdue-section hidden" id="overdueSection">
+          <h2 class="section-title overdue-title">Overdue</h2>
+          <ul class="objectives-list overdue-list" id="overdueList"></ul>
+        </div>
+
+        <h2 class="section-title">Today's Objectives</h2>
         <div class="date-label" id="todayLabel"></div>
+        <div class="progress-bar-container" id="progressContainer">
+          <div class="progress-bar" id="progressBar"></div>
+          <span class="progress-text" id="progressText">0 / 0 done</span>
+        </div>
         <ul class="objectives-list" id="dailyObjectives">
           <li class="empty-state">No objectives for today. Use the chat to add some!</li>
         </ul>
+
+        <!-- Birthdays & Anniversaries -->
+        <div class="birthdays-section">
+          <h2 class="section-title birthday-title">Birthdays & Anniversaries</h2>
+          <div class="birthday-upcoming" id="birthdayUpcoming">
+            <span class="empty-state-inline">No upcoming celebrations</span>
+          </div>
+          <button class="add-birthday-btn" id="addBirthdayBtn">+ Add Birthday / Anniversary</button>
+        </div>
       </aside>
 
       <!-- Center: Calendar -->
       <main class="calendar-container">
-        <!-- View Tabs -->
-        <div class="view-tabs">
-          <button class="tab active" data-view="month" id="monthTab">Month</button>
-          <button class="tab" data-view="week" id="weekTab">Week</button>
+        <!-- View Tabs + Today Button -->
+        <div class="calendar-toolbar">
+          <div class="view-tabs">
+            <button class="tab active" data-view="month" id="monthTab">Month</button>
+            <button class="tab" data-view="week" id="weekTab">Week</button>
+          </div>
+          <button class="today-btn" id="todayBtn">Today</button>
         </div>
 
         <!-- Month Navigation -->
@@ -61,7 +104,7 @@
 
       <!-- Right Sidebar: Monthly Horizon -->
       <aside class="sidebar horizon-panel">
-        <h2>On the Horizon</h2>
+        <h2 class="section-title">On the Horizon</h2>
         <div class="horizon-label" id="horizonLabel"></div>
         <ul class="horizon-list" id="horizonList">
           <li class="empty-state">Nothing upcoming this month yet.</li>
@@ -69,19 +112,25 @@
       </aside>
     </div>
 
-    <!-- Chatbox -->
-    <div class="chatbox">
-      <div class="chat-messages" id="chatMessages">
-        <div class="chat-message bot">
-          <span>Hi! Tell me what to add to your calendar. Try things like:<br>
-          <em>"Meeting with team on March 25 at 2pm"</em><br>
-          <em>"Finish report by Friday"</em><br>
-          <em>"Gym every Monday and Wednesday"</em></span>
-        </div>
+    <!-- Chatbox (collapsible) -->
+    <div class="chatbox" id="chatbox">
+      <div class="chat-toggle" id="chatToggle">
+        <span class="chat-toggle-label">Quick Add</span>
+        <span class="chat-toggle-arrow" id="chatArrow">&#9650;</span>
       </div>
-      <div class="chat-input-area">
-        <input type="text" id="chatInput" placeholder="Type an event or objective..." autocomplete="off">
-        <button id="chatSend">Send</button>
+      <div class="chat-body" id="chatBody">
+        <div class="chat-messages" id="chatMessages">
+          <div class="chat-message bot">
+            <span>Hi! Tell me what to add to your calendar. Try things like:<br>
+            <em>"Meeting with team on March 25 at 2pm"</em><br>
+            <em>"Finish report by Friday"</em><br>
+            <em>"Birthday: Mom on June 15"</em></span>
+          </div>
+        </div>
+        <div class="chat-input-area">
+          <input type="text" id="chatInput" placeholder="Type an event, birthday, or objective..." autocomplete="off">
+          <button id="chatSend">Send</button>
+        </div>
       </div>
     </div>
   </div>
@@ -107,10 +156,42 @@
             <option value="deadline">Deadline</option>
             <option value="reminder">Reminder</option>
             <option value="personal">Personal</option>
+            <option value="birthday">Birthday / Anniversary</option>
+          </select>
+        </label>
+        <div class="recurring-option hidden" id="recurringOption">
+          <label class="checkbox-label">
+            <input type="checkbox" id="eventRecurring" checked>
+            Repeats every year
+          </label>
+        </div>
+        <div class="modal-actions">
+          <button type="button" id="modalCancel">Cancel</button>
+          <button type="submit">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Birthday Modal -->
+  <div class="modal-overlay hidden" id="birthdayModalOverlay">
+    <div class="modal">
+      <h3>Add Birthday / Anniversary</h3>
+      <form id="birthdayForm">
+        <label>Name
+          <input type="text" id="birthdayName" required placeholder="e.g. Mom's Birthday">
+        </label>
+        <label>Date
+          <input type="date" id="birthdayDate" required>
+        </label>
+        <label>Type
+          <select id="birthdayType">
+            <option value="birthday">Birthday</option>
+            <option value="anniversary">Anniversary</option>
           </select>
         </label>
         <div class="modal-actions">
-          <button type="button" id="modalCancel">Cancel</button>
+          <button type="button" id="birthdayCancel">Cancel</button>
           <button type="submit">Save</button>
         </div>
       </form>
