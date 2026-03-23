@@ -235,9 +235,8 @@ async function saveEvents() {
   // Always keep localStorage as offline fallback (instant)
   localStorage.setItem('calendarEvents', JSON.stringify(state.events));
 
-  // Debounce Supabase sync to avoid excessive calls
-  if (_syncTimer) clearTimeout(_syncTimer);
-  _syncTimer = setTimeout(() => _syncToSupabase(), 500);
+  // Sync to Supabase immediately (not debounced) so other devices see changes
+  await _syncToSupabase();
 }
 
 async function _syncToSupabase() {
@@ -250,8 +249,15 @@ async function _syncToSupabase() {
       const { error } = await db.from('calendar_events').upsert(rows);
       if (error) console.error('Supabase sync error:', error.message);
     }
+  } catch (err) {
+    console.error('Supabase sync failed (offline?):', err.message);
+  }
+}
 
-    // Delete events from Supabase that no longer exist locally
+// Periodic cleanup: remove remote events that were deleted locally
+async function _cleanupDeletedEvents() {
+  if (!state.user) return;
+  try {
     const { data: remoteEvents } = await db
       .from('calendar_events')
       .select('id')
@@ -265,7 +271,7 @@ async function _syncToSupabase() {
       }
     }
   } catch (err) {
-    console.error('Supabase sync failed (offline?):', err.message);
+    console.error('Supabase cleanup failed:', err.message);
   }
 }
 
@@ -2155,6 +2161,7 @@ async function initApp(user) {
   if (window._autoSaveInterval) clearInterval(window._autoSaveInterval);
   window._autoSaveInterval = setInterval(() => {
     _syncToSupabase();
+    _cleanupDeletedEvents();
     saveStreaks();
   }, 30000);
 
