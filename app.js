@@ -30,6 +30,62 @@ function showSyncStatus(status) {
   }
 }
 
+// ===== Pending Sync Queue (mobile reliability) =====
+// Events that failed to sync or haven't been confirmed are queued here.
+// They're retried on visibility change, interval, and page hide.
+let _pendingSyncs = JSON.parse(localStorage.getItem('_pendingSyncs') || '[]');
+let _pendingDeletes = JSON.parse(localStorage.getItem('_pendingDeletes') || '[]');
+
+function savePendingQueue() {
+  localStorage.setItem('_pendingSyncs', JSON.stringify(_pendingSyncs));
+  localStorage.setItem('_pendingDeletes', JSON.stringify(_pendingDeletes));
+}
+
+function queueSync(event) {
+  // Replace existing entry for same id
+  _pendingSyncs = _pendingSyncs.filter(e => e.id !== event.id);
+  _pendingSyncs.push(event);
+  savePendingQueue();
+}
+
+function queueDelete(id) {
+  if (!_pendingDeletes.includes(id)) _pendingDeletes.push(id);
+  // Remove from sync queue if pending
+  _pendingSyncs = _pendingSyncs.filter(e => e.id !== id);
+  savePendingQueue();
+}
+
+function dequeueSync(eventId) {
+  _pendingSyncs = _pendingSyncs.filter(e => e.id !== eventId);
+  savePendingQueue();
+}
+
+function dequeueDelete(id) {
+  _pendingDeletes = _pendingDeletes.filter(x => x !== id);
+  savePendingQueue();
+}
+
+async function flushPendingQueue() {
+  if (!state.user) return;
+  // Flush pending syncs
+  const syncs = [..._pendingSyncs];
+  for (const event of syncs) {
+    try {
+      const row = eventToRow(event);
+      const { error } = await db.from('calendar_events').upsert(row, { onConflict: 'id' });
+      if (!error) dequeueSync(event.id);
+    } catch { /* will retry next time */ }
+  }
+  // Flush pending deletes
+  const deletes = [..._pendingDeletes];
+  for (const id of deletes) {
+    try {
+      const { error } = await db.from('calendar_events').delete().eq('id', id).eq('user_id', state.user.id);
+      if (!error) dequeueDelete(id);
+    } catch { /* will retry next time */ }
+  }
+}
+
 // ===== State =====
 const state = {
   events: [],
@@ -383,37 +439,48 @@ function rowToEvent(row) {
 }
 
 async function syncEventToSupabase(event) {
-  if (!state.user) { showSyncStatus('No user logged in'); return; }
+  if (!state.user) { showSyncStatus('No user logged in'); return false; }
   showSyncStatus('syncing');
+  // Always queue first so it persists even if the page is killed
+  queueSync(event);
   try {
     const row = eventToRow(event);
-    const { error, status } = await db.from('calendar_events').upsert(row, { onConflict: 'id' });
+    const { error } = await db.from('calendar_events').upsert(row, { onConflict: 'id' });
     if (error) {
       console.error('syncEvent error:', error);
       showSyncStatus(`Sync error: ${error.message}`);
+      return false;
     } else {
+      dequeueSync(event.id);
       showSyncStatus('saved');
+      return true;
     }
   } catch (err) {
     console.error('syncEvent exception:', err);
     showSyncStatus(`Sync error: ${err.message}`);
+    return false;
   }
 }
 
 async function deleteEventFromSupabase(id) {
-  if (!state.user) return;
+  if (!state.user) return false;
   showSyncStatus('syncing');
+  queueDelete(id);
   try {
-    const { error, status } = await db.from('calendar_events').delete().eq('id', id).eq('user_id', state.user.id);
+    const { error } = await db.from('calendar_events').delete().eq('id', id).eq('user_id', state.user.id);
     if (error) {
       console.error('deleteEvent error:', error);
       showSyncStatus(`Sync error: ${error.message}`);
+      return false;
     } else {
+      dequeueDelete(id);
       showSyncStatus('saved');
+      return true;
     }
   } catch (err) {
     console.error('deleteEvent exception:', err);
     showSyncStatus(`Sync error: ${err.message}`);
+    return false;
   }
 }
 
@@ -1121,18 +1188,18 @@ function closeConflictDialog() {
   conflictingEvents = [];
 }
 
-function addEventWithConflictCheck(event, source) {
+async function addEventWithConflictCheck(event, source) {
   const existing = findExistingEvents(event.date);
   if (existing.length > 0) {
     pendingConflictEvent = { event, source };
     showConflictDialog(event, existing);
   } else {
-    commitAddEvent(event, source);
+    await commitAddEvent(event, source);
   }
 }
 
-function commitAddEvent(event, source) {
-  addEvent(event);
+async function commitAddEvent(event, source) {
+  await addEvent(event);
   if (source === 'chat') {
     const dateObj = new Date(event.date + 'T00:00:00');
     const dateDisplay = formatDisplay(dateObj);
@@ -1152,7 +1219,7 @@ function commitAddEvent(event, source) {
 }
 
 // ===== Events CRUD =====
-function addEvent(event) {
+async function addEvent(event) {
   event.completed = event.completed || false;
   event.endTime = event.endTime || null;
   event.priority = event.priority || 'medium';
@@ -1161,16 +1228,16 @@ function addEvent(event) {
   event.completedDates = event.completedDates || [];
   state.events.push(event);
   saveEvents();
-  syncEventToSupabase(event);
   render();
+  await syncEventToSupabase(event);
 }
 
-function deleteEvent(id) {
+async function deleteEvent(id) {
   state.events = state.events.filter(e => e.id !== id);
   saveEvents();
-  deleteEventFromSupabase(id);
   render();
   if (state.focusMode) renderFocusMode();
+  await deleteEventFromSupabase(id);
 }
 
 // ===== Modal =====
@@ -2281,6 +2348,7 @@ async function initApp(user) {
   // Try loading from Supabase first, fall back to localStorage
   try {
     await discoverColumns();
+    await flushPendingQueue();
     await migrateLocalToSupabase();
     await loadFromSupabase();
   } catch (e) {
@@ -2300,22 +2368,35 @@ async function initApp(user) {
   // Start real-time sync for cross-device updates
   startRealtimeSync();
 
-  // Auto-save to Supabase every 30 seconds
+  // Auto-save to Supabase every 30 seconds + flush pending queue
   if (window._autoSaveInterval) clearInterval(window._autoSaveInterval);
   window._autoSaveInterval = setInterval(() => {
+    flushPendingQueue();
     _syncToSupabase();
     _cleanupDeletedEvents();
     saveStreaks();
   }, 30000);
 
   // Re-fetch from Supabase when tab regains focus (covers phone switching back)
+  // Also flush any pending syncs that failed while the page was backgrounded
   document.addEventListener('visibilitychange', async () => {
     if (document.visibilityState === 'visible' && state.user) {
       try {
+        await flushPendingQueue();
         await loadFromSupabase();
         render();
         if (state.focusMode) renderFocusMode();
       } catch (e) { /* offline, use cached */ }
+    }
+  });
+
+  // On iOS, pagehide fires reliably when the user switches apps/tabs.
+  // Use sendBeacon to flush any pending syncs before the page is killed.
+  window.addEventListener('pagehide', () => {
+    if (_pendingSyncs.length > 0 || _pendingDeletes.length > 0) {
+      // sendBeacon can't do upserts directly, but we can hit a Supabase REST endpoint
+      // For now, ensure the queue is persisted to localStorage (already done by queueSync)
+      savePendingQueue();
     }
   });
 
