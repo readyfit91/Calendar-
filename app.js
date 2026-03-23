@@ -1117,10 +1117,154 @@ function parseChat(text) {
   return result;
 }
 
+// ===== Query Detection =====
+function tryHandleQuery(text) {
+  const lower = text.toLowerCase().trim();
+
+  // Detect query patterns
+  const queryPatterns = [
+    /what('s| is| do i have| have i got|s)?\s+(planned|scheduled|on|happening|going on|coming up)/i,
+    /do i have (anything|something|any ?thing)/i,
+    /show (me )?(my )?(events?|schedule|plans?|calendar)/i,
+    /anything (planned|scheduled|on|happening)/i,
+    /what('s| is) (on|for)/i,
+    /plans? for/i,
+    /schedule for/i,
+    /how('s| does)? my (day|week|month) look/i,
+    /read (back|me)/i,
+  ];
+
+  const isQuery = queryPatterns.some(p => p.test(lower));
+  if (!isQuery) return false;
+
+  // Parse the date from the query
+  const date = parseDateFromText(text);
+  if (!date) {
+    addChatMessage("I couldn't figure out which date you mean. Try something like \"What do I have on Monday?\" or \"What's planned for March 25?\"", 'bot');
+    return true;
+  }
+
+  const dateStr = formatDate(date);
+  const events = getEventsForDate(dateStr)
+    .sort((a, b) => getPriorityOrder(a.priority) - getPriorityOrder(b.priority) || (a.time || '').localeCompare(b.time || ''));
+
+  const dateDisplay = formatDisplay(date);
+  const today = new Date();
+  const isToday = sameDay(date, today);
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const isTomorrow = sameDay(date, tomorrow);
+  const dayLabel = isToday ? 'today' : isTomorrow ? 'tomorrow' : `on ${dateDisplay}`;
+
+  if (events.length === 0) {
+    addChatMessage(`You have nothing planned ${dayLabel}. Your schedule is clear!`, 'bot');
+    return true;
+  }
+
+  const priorityLabels = { high: 'HIGH', medium: '', low: 'low' };
+  const lines = events.map(e => {
+    const time = e.time ? formatTime(e.time) : 'No time set';
+    const done = e.completed ? ' [DONE]' : '';
+    const pri = e.priority !== 'medium' ? ` [${priorityLabels[e.priority]}]` : '';
+    const recur = e.recurrence && e.recurrence !== 'none' ? ` (${e.recurrence})` : '';
+    return `• ${time} — ${e.title}${pri}${recur}${done}`;
+  });
+
+  const summary = events.length === 1 ? '1 item' : `${events.length} items`;
+  const completed = events.filter(e => e.completed).length;
+  const progressNote = completed > 0 ? ` (${completed}/${events.length} completed)` : '';
+
+  const response = `Here's what you have ${dayLabel} — ${summary}${progressNote}:\n\n${lines.join('\n')}`;
+  addChatBotHtml(formatChatResponse(response));
+  return true;
+}
+
+function parseDateFromText(text) {
+  const lower = text.toLowerCase();
+  const today = new Date();
+
+  if (lower.includes('today')) return today;
+
+  if (lower.includes('tomorrow')) {
+    const d = new Date(today);
+    d.setDate(d.getDate() + 1);
+    return d;
+  }
+
+  if (lower.includes('yesterday')) {
+    const d = new Date(today);
+    d.setDate(d.getDate() - 1);
+    return d;
+  }
+
+  // Day names
+  const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+  const dayMatch = lower.match(new RegExp(`\\b(next\\s+)?(this\\s+)?(${dayNames.join('|')})\\b`));
+  if (dayMatch) {
+    const targetDay = dayNames.indexOf(dayMatch[3]);
+    const isNext = !!dayMatch[1];
+    const d = new Date(today);
+    let diff = targetDay - d.getDay();
+    if (diff <= 0 || isNext) diff += 7;
+    if (dayMatch[2] && diff > 7) diff -= 7; // "this Monday"
+    d.setDate(d.getDate() + diff);
+    return d;
+  }
+
+  // Month + day: "March 25", "March 25th"
+  const monthNames = ['january', 'february', 'march', 'april', 'may', 'june',
+    'july', 'august', 'september', 'october', 'november', 'december'];
+  const monthPattern = new RegExp(`\\b(${monthNames.join('|')})\\s+(\\d{1,2})(?:st|nd|rd|th)?(?:\\s*,?\\s*(\\d{4}))?`, 'i');
+  const monthMatch = text.match(monthPattern);
+  if (monthMatch) {
+    const m = monthNames.indexOf(monthMatch[1].toLowerCase());
+    const day = parseInt(monthMatch[2]);
+    const y = monthMatch[3] ? parseInt(monthMatch[3]) : today.getFullYear();
+    return new Date(y, m, day);
+  }
+
+  // Numeric dates: 3/25, 03/25/2026
+  const numMatch = text.match(/\b(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b/);
+  if (numMatch) {
+    const m = parseInt(numMatch[1]) - 1;
+    const day = parseInt(numMatch[2]);
+    let y = numMatch[3] ? parseInt(numMatch[3]) : today.getFullYear();
+    if (y < 100) y += 2000;
+    return new Date(y, m, day);
+  }
+
+  // "this week" → show today
+  if (lower.includes('this week') || lower.includes('my week')) return today;
+
+  // Fallback: if nothing matched but it's a query, assume today
+  if (lower.includes('today') || lower.match(/\bmy day\b/) || lower.match(/\bthe day\b/)) return today;
+
+  // Last resort: assume today for vague queries
+  if (lower.match(/what('s| do).*have/i) && !dayMatch && !monthMatch) return today;
+
+  return null;
+}
+
+function formatChatResponse(text) {
+  return text.replace(/\n/g, '<br>').replace(/•/g, '<span style="color:var(--primary)">•</span>');
+}
+
+function addChatBotHtml(html) {
+  const div = document.createElement('div');
+  div.className = 'chat-message bot';
+  div.innerHTML = `<span>${html}</span>`;
+  els.chatMessages.appendChild(div);
+  els.chatMessages.scrollTop = els.chatMessages.scrollHeight;
+}
+
 function handleChat(text) {
   if (!text.trim()) return;
 
   addChatMessage(text, 'user');
+  els.chatInput.value = '';
+
+  // Check if this is a query about existing events
+  if (tryHandleQuery(text)) return;
 
   const parsed = parseChat(text);
   const event = {
@@ -1137,7 +1281,6 @@ function handleChat(text) {
   };
 
   addEventWithConflictCheck(event, 'chat');
-  els.chatInput.value = '';
 }
 
 function addChatMessage(text, type) {
