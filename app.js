@@ -224,7 +224,7 @@ async function loadFromSupabase() {
   if (!state.user) return;
 
   // Load events
-  const { data: events } = await supabase
+  const { data: events } = await db
     .from('calendar_events')
     .select('*')
     .eq('user_id', state.user.id);
@@ -235,7 +235,7 @@ async function loadFromSupabase() {
   }
 
   // Load streaks
-  const { data: streaks } = await supabase
+  const { data: streaks } = await db
     .from('calendar_streaks')
     .select('*')
     .eq('user_id', state.user.id)
@@ -255,7 +255,7 @@ async function loadFromSupabase() {
 async function migrateLocalToSupabase() {
   if (!state.user) return;
 
-  const { data: existing } = await supabase
+  const { data: existing } = await db
     .from('calendar_events')
     .select('id')
     .eq('user_id', state.user.id)
@@ -1155,25 +1155,64 @@ function tryHandleQuery(text) {
   const dayLabel = isToday ? 'today' : isTomorrow ? 'tomorrow' : `on ${dateDisplay}`;
 
   if (events.length === 0) {
-    addChatMessage(`You have nothing planned ${dayLabel}. Your schedule is clear!`, 'bot');
+    addChatBotHtml(`<div class="query-response">
+      <div class="query-header empty">
+        <span class="query-date-label">${dateDisplay}</span>
+        <span class="query-summary">Nothing planned</span>
+      </div>
+      <div class="query-empty-msg">Your schedule is clear ${dayLabel}!</div>
+    </div>`);
+
+    // Navigate calendar to the queried date
+    state.currentDate = new Date(date);
+    render();
     return true;
   }
 
-  const priorityLabels = { high: 'HIGH', medium: '', low: 'low' };
-  const lines = events.map(e => {
-    const time = e.time ? formatTime(e.time) : 'No time set';
-    const done = e.completed ? ' [DONE]' : '';
-    const pri = e.priority !== 'medium' ? ` [${priorityLabels[e.priority]}]` : '';
-    const recur = e.recurrence && e.recurrence !== 'none' ? ` (${e.recurrence})` : '';
-    return `• ${time} — ${e.title}${pri}${recur}${done}`;
-  });
-
-  const summary = events.length === 1 ? '1 item' : `${events.length} items`;
   const completed = events.filter(e => e.completed).length;
-  const progressNote = completed > 0 ? ` (${completed}/${events.length} completed)` : '';
+  const percent = Math.round((completed / events.length) * 100);
+  const summary = events.length === 1 ? '1 item' : `${events.length} items`;
 
-  const response = `Here's what you have ${dayLabel} — ${summary}${progressNote}:\n\n${lines.join('\n')}`;
-  addChatBotHtml(formatChatResponse(response));
+  const categoryIcons = {
+    objective: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>',
+    meeting: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
+    deadline: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>',
+    reminder: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>',
+    personal: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>',
+  };
+
+  const eventCards = events.map(e => {
+    const icon = categoryIcons[e.category] || categoryIcons.objective;
+    const timeStr = e.time ? formatTime(e.time) : '';
+    const priClass = e.priority === 'high' ? 'pri-high' : e.priority === 'low' ? 'pri-low' : '';
+    const doneClass = e.completed ? ' done' : '';
+    const recurBadge = e.recurrence && e.recurrence !== 'none'
+      ? `<span class="query-recur">&#x21BB; ${e.recurrence}</span>` : '';
+
+    return `<div class="query-event-card cat-${e.category}${doneClass} ${priClass}">
+      <div class="query-event-icon">${icon}</div>
+      <div class="query-event-details">
+        <span class="query-event-title">${escapeHtml(e.title)}</span>
+        <span class="query-event-meta">${timeStr ? timeStr + ' ' : ''}<span class="query-cat-label">${e.category}</span>${recurBadge}</span>
+      </div>
+      ${e.completed ? '<span class="query-done-badge">Done</span>' : ''}
+    </div>`;
+  }).join('');
+
+  const progressBar = `<div class="query-progress-track"><div class="query-progress-fill${percent === 100 ? ' complete' : ''}" style="width:${percent}%"></div></div>`;
+
+  addChatBotHtml(`<div class="query-response">
+    <div class="query-header">
+      <span class="query-date-label">${dateDisplay}</span>
+      <span class="query-summary">${summary}${completed > 0 ? ` &middot; ${completed} done` : ''}</span>
+    </div>
+    ${progressBar}
+    <div class="query-event-list">${eventCards}</div>
+  </div>`);
+
+  // Navigate calendar to the queried date
+  state.currentDate = new Date(date);
+  render();
   return true;
 }
 
@@ -1458,6 +1497,71 @@ function showAuth() {
   authEls.appMain.classList.add('hidden');
 }
 
+// ===== Real-Time Sync =====
+let realtimeChannel = null;
+
+function startRealtimeSync() {
+  if (!state.user || realtimeChannel) return;
+
+  realtimeChannel = db
+    .channel('calendar-sync')
+    .on('postgres_changes', {
+      event: '*',
+      schema: 'public',
+      table: 'calendar_events',
+      filter: `user_id=eq.${state.user.id}`,
+    }, (payload) => {
+      if (payload.eventType === 'INSERT') {
+        const newEvent = rowToEvent(payload.new);
+        if (!state.events.find(e => e.id === newEvent.id)) {
+          state.events.push(newEvent);
+          saveEvents();
+          render();
+        }
+      } else if (payload.eventType === 'UPDATE') {
+        const updated = rowToEvent(payload.new);
+        const idx = state.events.findIndex(e => e.id === updated.id);
+        if (idx >= 0) {
+          state.events[idx] = updated;
+        } else {
+          state.events.push(updated);
+        }
+        saveEvents();
+        render();
+        if (state.focusMode) renderFocusMode();
+      } else if (payload.eventType === 'DELETE') {
+        state.events = state.events.filter(e => e.id !== payload.old.id);
+        saveEvents();
+        render();
+        if (state.focusMode) renderFocusMode();
+      }
+    })
+    .on('postgres_changes', {
+      event: '*',
+      schema: 'public',
+      table: 'calendar_streaks',
+      filter: `user_id=eq.${state.user.id}`,
+    }, (payload) => {
+      if (payload.new) {
+        state.streaks = {
+          current: payload.new.current_streak,
+          best: payload.new.best_streak,
+          lastCompletedDate: payload.new.last_completed_date,
+        };
+        localStorage.setItem('calendarStreaks', JSON.stringify(state.streaks));
+        updateStreaks();
+      }
+    })
+    .subscribe();
+}
+
+function stopRealtimeSync() {
+  if (realtimeChannel) {
+    db.removeChannel(realtimeChannel);
+    realtimeChannel = null;
+  }
+}
+
 async function initApp(user) {
   state.user = user;
 
@@ -1477,6 +1581,9 @@ async function initApp(user) {
     }));
     state.streaks = JSON.parse(localStorage.getItem('calendarStreaks') || '{"current":0,"best":0,"lastCompletedDate":null}');
   }
+
+  // Start real-time sync for cross-device updates
+  startRealtimeSync();
 
   showApp();
   render();
@@ -1524,6 +1631,7 @@ authEls.signUp.addEventListener('click', async () => {
 });
 
 authEls.signOutBtn.addEventListener('click', async () => {
+  stopRealtimeSync();
   await db.auth.signOut();
   state.user = null;
   state.events = [];
