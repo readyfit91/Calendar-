@@ -22,10 +22,12 @@ function showSyncStatus(status) {
     el.textContent = 'Saved';
     el.style.background = '#34d399'; el.style.color = '#000'; el.style.opacity = '1';
     _syncStatusTimer = setTimeout(() => { el.style.opacity = '0'; }, 1500);
-  } else if (status === 'error') {
-    el.textContent = 'Sync failed';
+  } else {
+    // status is 'error' or an error message string
+    el.textContent = typeof status === 'string' && status.length > 15 ? status : 'Sync failed';
     el.style.background = '#f87171'; el.style.color = '#fff'; el.style.opacity = '1';
-    _syncStatusTimer = setTimeout(() => { el.style.opacity = '0'; }, 3000);
+    el.style.maxWidth = '90vw'; el.style.wordBreak = 'break-word';
+    _syncStatusTimer = setTimeout(() => { el.style.opacity = '0'; }, 5000);
   }
 }
 
@@ -358,14 +360,14 @@ async function syncEventToSupabase(event) {
     const { error, status, statusText } = await db.from('calendar_events').upsert(row, { onConflict: 'id' });
     if (error) {
       console.error('syncEvent error:', error.message, error.details, error.hint, error.code, 'status:', status, statusText);
-      showSyncStatus('error');
+      showSyncStatus(`Sync error: ${error.message || error.code || status}`);
     } else {
       console.log('syncEvent success, status:', status);
       showSyncStatus('saved');
     }
   } catch (err) {
     console.error('syncEvent exception:', err);
-    showSyncStatus('error');
+    showSyncStatus(`Sync error: ${err.message}`);
   }
 }
 
