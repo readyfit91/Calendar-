@@ -9,9 +9,32 @@
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#0f1117">
   <link rel="stylesheet" href="styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
-  <div class="app">
+  <!-- Auth Screen -->
+  <div class="auth-screen" id="authScreen">
+    <div class="auth-card">
+      <h1 class="auth-title">My Calendar</h1>
+      <p class="auth-subtitle">Sign in to sync your calendar across devices</p>
+      <form id="authForm">
+        <label>Email
+          <input type="email" id="authEmail" required placeholder="you@example.com">
+        </label>
+        <label>Password
+          <input type="password" id="authPassword" required placeholder="Min 6 characters" minlength="6">
+        </label>
+        <div class="auth-actions">
+          <button type="submit" class="btn-primary" id="authSignIn">Sign In</button>
+          <button type="button" class="btn-secondary" id="authSignUp">Sign Up</button>
+        </div>
+      </form>
+      <div class="auth-error hidden" id="authError"></div>
+      <div class="auth-info hidden" id="authInfo"></div>
+    </div>
+  </div>
+
+  <div class="app hidden" id="appMain">
     <!-- Header -->
     <header class="header">
       <h1>My Calendar</h1>
@@ -39,6 +62,9 @@
           Focus
         </button>
         <div class="current-date" id="currentDate"></div>
+        <button class="signout-btn" id="signOutBtn" title="Sign Out">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        </button>
       </div>
     </header>
 

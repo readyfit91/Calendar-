@@ -1,24 +1,19 @@
+// ===== Supabase Setup =====
+const SUPABASE_URL = 'https://llvujuehggjckxrtoool.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxsdnVqdWVoZ2dqY2t4cnRvb29sIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM3MTQ4MDcsImV4cCI6MjA4OTI5MDgwN30.irXnI7_h-Z_RGPRcvhOyC0nF_atAFDXaRHv2m5iCRd0';
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
 // ===== State =====
 const state = {
-  events: JSON.parse(localStorage.getItem('calendarEvents') || '[]'),
+  events: [],
   currentDate: new Date(),
   selectedDate: new Date(),
   view: 'month',
   focusMode: false,
   draggedEvent: null,
-  streaks: JSON.parse(localStorage.getItem('calendarStreaks') || '{"current":0,"best":0,"lastCompletedDate":null}'),
+  streaks: { current: 0, best: 0, lastCompletedDate: null },
+  user: null,
 };
-
-// Migrate old events without completed/priority/recurrence fields
-state.events = state.events.map(e => ({
-  ...e,
-  completed: e.completed || false,
-  priority: e.priority || 'medium',
-  recurrence: e.recurrence || 'none',
-  recurrenceEnd: e.recurrenceEnd || null,
-  completedDates: e.completedDates || [],
-}));
-saveEvents();
 
 // ===== DOM Elements =====
 const $ = (sel) => document.querySelector(sel);
@@ -164,12 +159,133 @@ function getRecurrenceIcon(recurrence, recurrenceEnd) {
   return `<span class="recurrence-badge" title="Repeats ${labels[recurrence]}${endLabel}">&#x21BB; ${labels[recurrence]}</span>`;
 }
 
-function saveEvents() {
+async function saveEvents() {
+  // Also keep localStorage as offline fallback
   localStorage.setItem('calendarEvents', JSON.stringify(state.events));
 }
 
-function saveStreaks() {
+async function saveStreaks() {
   localStorage.setItem('calendarStreaks', JSON.stringify(state.streaks));
+  if (state.user) {
+    await supabase.from('calendar_streaks').upsert({
+      user_id: state.user.id,
+      current_streak: state.streaks.current,
+      best_streak: state.streaks.best,
+      last_completed_date: state.streaks.lastCompletedDate,
+    });
+  }
+}
+
+// Convert event object to DB row format
+function eventToRow(event) {
+  return {
+    id: event.id,
+    user_id: state.user.id,
+    title: event.title,
+    date: event.date,
+    time: event.time || null,
+    category: event.category || 'objective',
+    priority: event.priority || 'medium',
+    recurrence: event.recurrence || 'none',
+    recurrence_end: event.recurrenceEnd || null,
+    completed: event.completed || false,
+    completed_dates: event.completedDates || [],
+  };
+}
+
+// Convert DB row to event object
+function rowToEvent(row) {
+  return {
+    id: row.id,
+    title: row.title,
+    date: row.date,
+    time: row.time,
+    category: row.category,
+    priority: row.priority,
+    recurrence: row.recurrence,
+    recurrenceEnd: row.recurrence_end,
+    completed: row.completed,
+    completedDates: row.completed_dates || [],
+  };
+}
+
+async function syncEventToSupabase(event) {
+  if (!state.user) return;
+  await supabase.from('calendar_events').upsert(eventToRow(event));
+}
+
+async function deleteEventFromSupabase(id) {
+  if (!state.user) return;
+  await supabase.from('calendar_events').delete().eq('id', id);
+}
+
+async function loadFromSupabase() {
+  if (!state.user) return;
+
+  // Load events
+  const { data: events } = await supabase
+    .from('calendar_events')
+    .select('*')
+    .eq('user_id', state.user.id);
+
+  if (events) {
+    state.events = events.map(rowToEvent);
+    localStorage.setItem('calendarEvents', JSON.stringify(state.events));
+  }
+
+  // Load streaks
+  const { data: streaks } = await supabase
+    .from('calendar_streaks')
+    .select('*')
+    .eq('user_id', state.user.id)
+    .single();
+
+  if (streaks) {
+    state.streaks = {
+      current: streaks.current_streak,
+      best: streaks.best_streak,
+      lastCompletedDate: streaks.last_completed_date,
+    };
+    localStorage.setItem('calendarStreaks', JSON.stringify(state.streaks));
+  }
+}
+
+// Migrate localStorage data to Supabase for first-time users
+async function migrateLocalToSupabase() {
+  if (!state.user) return;
+
+  const { data: existing } = await supabase
+    .from('calendar_events')
+    .select('id')
+    .eq('user_id', state.user.id)
+    .limit(1);
+
+  // Only migrate if user has no events in Supabase yet
+  if (existing && existing.length > 0) return;
+
+  const localEvents = JSON.parse(localStorage.getItem('calendarEvents') || '[]');
+  if (localEvents.length === 0) return;
+
+  const rows = localEvents.map(e => eventToRow({
+    ...e,
+    completed: e.completed || false,
+    priority: e.priority || 'medium',
+    recurrence: e.recurrence || 'none',
+    recurrenceEnd: e.recurrenceEnd || null,
+    completedDates: e.completedDates || [],
+  }));
+
+  await supabase.from('calendar_events').upsert(rows);
+
+  const localStreaks = JSON.parse(localStorage.getItem('calendarStreaks') || '{}');
+  if (localStreaks.current || localStreaks.best) {
+    await supabase.from('calendar_streaks').upsert({
+      user_id: state.user.id,
+      current_streak: localStreaks.current || 0,
+      best_streak: localStreaks.best || 0,
+      last_completed_date: localStreaks.lastCompletedDate || null,
+    });
+  }
 }
 
 function generateId() {
@@ -265,6 +381,7 @@ function toggleEventComplete(id, dateStr) {
   }
 
   saveEvents();
+  syncEventToSupabase(event);
   updateProgress();
   updateStreaks();
   render();
@@ -668,14 +785,15 @@ function rescheduleEvent(eventId, newDate) {
   const event = state.events.find(e => e.id === eventId);
   if (event && event.date !== newDate) {
     if (event.recurrence && event.recurrence !== 'none') {
-      // For recurring events, update the start date (shifts all future instances)
       event.date = newDate;
       saveEvents();
+      syncEventToSupabase(event);
       render();
       addChatMessage(`Rescheduled recurring "${event.title}" to start from ${formatDisplay(new Date(newDate + 'T00:00:00'))}.`, 'bot');
     } else {
       event.date = newDate;
       saveEvents();
+      syncEventToSupabase(event);
       render();
       addChatMessage(`Rescheduled "${event.title}" to ${formatDisplay(new Date(newDate + 'T00:00:00'))}.`, 'bot');
     }
@@ -819,12 +937,14 @@ function addEvent(event) {
   event.completedDates = event.completedDates || [];
   state.events.push(event);
   saveEvents();
+  syncEventToSupabase(event);
   render();
 }
 
 function deleteEvent(id) {
   state.events = state.events.filter(e => e.id !== id);
   saveEvents();
+  deleteEventFromSupabase(id);
   render();
   if (state.focusMode) renderFocusMode();
 }
@@ -1113,6 +1233,7 @@ els.conflictReplace.addEventListener('click', () => {
     // Delete the conflicting events
     conflictingEvents.forEach(c => {
       state.events = state.events.filter(e => e.id !== c.id);
+      deleteEventFromSupabase(c.id);
     });
     saveEvents();
     closeConflictDialog();
@@ -1159,5 +1280,115 @@ function updateClock() {
 }
 setInterval(updateClock, 60000);
 
-// ===== Initial Render =====
-render();
+// ===== Auth =====
+const authEls = {
+  screen: $('#authScreen'),
+  form: $('#authForm'),
+  email: $('#authEmail'),
+  password: $('#authPassword'),
+  signIn: $('#authSignIn'),
+  signUp: $('#authSignUp'),
+  error: $('#authError'),
+  info: $('#authInfo'),
+  signOutBtn: $('#signOutBtn'),
+  appMain: $('#appMain'),
+};
+
+function showAuthError(msg) {
+  authEls.error.textContent = msg;
+  authEls.error.classList.remove('hidden');
+  authEls.info.classList.add('hidden');
+}
+
+function showAuthInfo(msg) {
+  authEls.info.textContent = msg;
+  authEls.info.classList.remove('hidden');
+  authEls.error.classList.add('hidden');
+}
+
+function showApp() {
+  authEls.screen.classList.add('hidden');
+  authEls.appMain.classList.remove('hidden');
+}
+
+function showAuth() {
+  authEls.screen.classList.remove('hidden');
+  authEls.appMain.classList.add('hidden');
+}
+
+async function initApp(user) {
+  state.user = user;
+
+  // Try loading from Supabase first, fall back to localStorage
+  try {
+    await migrateLocalToSupabase();
+    await loadFromSupabase();
+  } catch (e) {
+    // Offline fallback: load from localStorage
+    state.events = JSON.parse(localStorage.getItem('calendarEvents') || '[]').map(ev => ({
+      ...ev,
+      completed: ev.completed || false,
+      priority: ev.priority || 'medium',
+      recurrence: ev.recurrence || 'none',
+      recurrenceEnd: ev.recurrenceEnd || null,
+      completedDates: ev.completedDates || [],
+    }));
+    state.streaks = JSON.parse(localStorage.getItem('calendarStreaks') || '{"current":0,"best":0,"lastCompletedDate":null}');
+  }
+
+  showApp();
+  render();
+}
+
+authEls.form.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const email = authEls.email.value.trim();
+  const password = authEls.password.value;
+
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+  if (error) {
+    showAuthError(error.message);
+  } else {
+    await initApp(data.user);
+  }
+});
+
+authEls.signUp.addEventListener('click', async () => {
+  const email = authEls.email.value.trim();
+  const password = authEls.password.value;
+
+  if (!email || password.length < 6) {
+    showAuthError('Enter a valid email and password (min 6 chars).');
+    return;
+  }
+
+  const { data, error } = await supabase.auth.signUp({ email, password });
+  if (error) {
+    showAuthError(error.message);
+  } else if (data.user && !data.user.confirmed_at && data.user.identities?.length === 0) {
+    showAuthError('An account with this email already exists.');
+  } else if (data.session) {
+    // Auto-confirmed (email confirmation disabled)
+    await initApp(data.user);
+  } else {
+    showAuthInfo('Account created! Check your email to confirm, then sign in.');
+  }
+});
+
+authEls.signOutBtn.addEventListener('click', async () => {
+  await supabase.auth.signOut();
+  state.user = null;
+  state.events = [];
+  state.streaks = { current: 0, best: 0, lastCompletedDate: null };
+  showAuth();
+});
+
+// ===== Check Existing Session =====
+(async () => {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (session?.user) {
+    await initApp(session.user);
+  } else {
+    showAuth();
+  }
+})();
