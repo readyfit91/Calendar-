@@ -4,7 +4,18 @@ const state = {
   currentDate: new Date(),
   selectedDate: new Date(),
   view: 'month',
+  focusMode: false,
+  draggedEvent: null,
+  streaks: JSON.parse(localStorage.getItem('calendarStreaks') || '{"current":0,"best":0,"lastCompletedDate":null}'),
 };
+
+// Migrate old events without completed/priority fields
+state.events = state.events.map(e => ({
+  ...e,
+  completed: e.completed || false,
+  priority: e.priority || 'medium',
+}));
+saveEvents();
 
 // ===== DOM Elements =====
 const $ = (sel) => document.querySelector(sel);
@@ -34,8 +45,21 @@ const els = {
   eventDate: $('#eventDate'),
   eventTime: $('#eventTime'),
   eventCategory: $('#eventCategory'),
+  eventPriority: $('#eventPriority'),
   modalCancel: $('#modalCancel'),
   modalTitle: $('#modalTitle'),
+  progressBar: $('#progressBar'),
+  progressText: $('#progressText'),
+  progressFill: $('#progressFill'),
+  streakCurrent: $('#streakCurrent'),
+  streakBest: $('#streakBest'),
+  focusToggle: $('#focusToggle'),
+  focusOverlay: $('#focusOverlay'),
+  focusList: $('#focusList'),
+  focusProgress: $('#focusProgress'),
+  focusProgressFill: $('#focusProgressFill'),
+  focusProgressText: $('#focusProgressText'),
+  focusClose: $('#focusClose'),
 };
 
 // ===== Helpers =====
@@ -78,8 +102,94 @@ function saveEvents() {
   localStorage.setItem('calendarEvents', JSON.stringify(state.events));
 }
 
+function saveStreaks() {
+  localStorage.setItem('calendarStreaks', JSON.stringify(state.streaks));
+}
+
 function generateId() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+}
+
+function getPriorityIcon(priority) {
+  switch (priority) {
+    case 'high': return '<span class="priority-icon priority-high" title="High priority">!!!</span>';
+    case 'medium': return '<span class="priority-icon priority-medium" title="Medium priority">!!</span>';
+    case 'low': return '<span class="priority-icon priority-low" title="Low priority">!</span>';
+    default: return '';
+  }
+}
+
+function getPriorityOrder(priority) {
+  return { high: 0, medium: 1, low: 2 }[priority] || 1;
+}
+
+// ===== Progress Tracking =====
+function getProgressForDate(dateStr) {
+  const events = getEventsForDate(dateStr);
+  if (events.length === 0) return { total: 0, completed: 0, percent: 0 };
+  const completed = events.filter(e => e.completed).length;
+  return { total: events.length, completed, percent: Math.round((completed / events.length) * 100) };
+}
+
+function updateProgress() {
+  const today = formatDate(new Date());
+  const { total, completed, percent } = getProgressForDate(today);
+
+  if (els.progressFill && els.progressText) {
+    els.progressFill.style.width = `${percent}%`;
+    els.progressText.textContent = total > 0 ? `${completed}/${total} tasks (${percent}%)` : 'No tasks today';
+    els.progressFill.className = 'progress-fill' + (percent === 100 ? ' complete' : '');
+  }
+}
+
+// ===== Streak Tracking =====
+function updateStreaks() {
+  const today = formatDate(new Date());
+  const { total, completed } = getProgressForDate(today);
+  const allDone = total > 0 && completed === total;
+
+  if (allDone && state.streaks.lastCompletedDate !== today) {
+    // Check if yesterday was completed to continue streak
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayStr = formatDate(yesterday);
+
+    if (state.streaks.lastCompletedDate === yesterdayStr) {
+      state.streaks.current += 1;
+    } else if (state.streaks.lastCompletedDate !== today) {
+      state.streaks.current = 1;
+    }
+
+    state.streaks.lastCompletedDate = today;
+    if (state.streaks.current > state.streaks.best) {
+      state.streaks.best = state.streaks.current;
+    }
+    saveStreaks();
+  } else if (!allDone && state.streaks.lastCompletedDate === today) {
+    // Un-completing a task today: revert
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayStr = formatDate(yesterday);
+    state.streaks.lastCompletedDate = yesterdayStr;
+    state.streaks.current = Math.max(0, state.streaks.current - 1);
+    saveStreaks();
+  }
+
+  if (els.streakCurrent) els.streakCurrent.textContent = state.streaks.current;
+  if (els.streakBest) els.streakBest.textContent = state.streaks.best;
+}
+
+// ===== Toggle Event Completion =====
+function toggleEventComplete(id) {
+  const event = state.events.find(e => e.id === id);
+  if (event) {
+    event.completed = !event.completed;
+    saveEvents();
+    updateProgress();
+    updateStreaks();
+    render();
+    if (state.focusMode) renderFocusMode();
+  }
 }
 
 // ===== Rendering =====
@@ -97,11 +207,15 @@ function render() {
   } else {
     renderWeekView();
   }
+
+  updateProgress();
+  updateStreaks();
 }
 
 function renderDailyObjectives(today) {
   const todayStr = formatDate(today);
-  const events = getEventsForDate(todayStr);
+  const events = getEventsForDate(todayStr)
+    .sort((a, b) => getPriorityOrder(a.priority) - getPriorityOrder(b.priority) || (a.time || '').localeCompare(b.time || ''));
 
   if (events.length === 0) {
     els.dailyObjectives.innerHTML = '<li class="empty-state">No objectives for today. Use the chat to add some!</li>';
@@ -109,17 +223,45 @@ function renderDailyObjectives(today) {
   }
 
   els.dailyObjectives.innerHTML = events.map(e => `
-    <li class="cat-${e.category}">
+    <li class="cat-${e.category}${e.completed ? ' completed' : ''}" draggable="true" data-event-id="${e.id}">
+      <label class="checkbox-wrapper" title="Mark ${e.completed ? 'incomplete' : 'complete'}">
+        <input type="checkbox" class="task-checkbox" data-id="${e.id}" ${e.completed ? 'checked' : ''}>
+        <span class="checkmark"></span>
+      </label>
+      ${getPriorityIcon(e.priority)}
       ${e.time ? `<span class="event-item-time">${formatTime(e.time)}</span>` : ''}
       <span class="event-item-title">${escapeHtml(e.title)}</span>
       <button class="event-item-delete" data-id="${e.id}" title="Delete">&times;</button>
     </li>
   `).join('');
 
-  els.dailyObjectives.querySelectorAll('.event-item-delete').forEach(btn => {
+  bindObjectiveEvents(els.dailyObjectives);
+}
+
+function bindObjectiveEvents(container) {
+  container.querySelectorAll('.task-checkbox').forEach(cb => {
+    cb.addEventListener('change', (ev) => {
+      ev.stopPropagation();
+      toggleEventComplete(cb.dataset.id);
+    });
+  });
+  container.querySelectorAll('.event-item-delete').forEach(btn => {
     btn.addEventListener('click', (ev) => {
       ev.stopPropagation();
       deleteEvent(btn.dataset.id);
+    });
+  });
+
+  // Drag from sidebar
+  container.querySelectorAll('li[draggable="true"]').forEach(li => {
+    li.addEventListener('dragstart', (ev) => {
+      state.draggedEvent = li.dataset.eventId;
+      ev.dataTransfer.effectAllowed = 'move';
+      li.classList.add('dragging');
+    });
+    li.addEventListener('dragend', () => {
+      state.draggedEvent = null;
+      li.classList.remove('dragging');
     });
   });
 }
@@ -133,7 +275,7 @@ function renderHorizon(today) {
   const todayStr = formatDate(today);
   const upcoming = state.events.filter(e => {
     return e.date > todayStr && e.date <= formatDate(endOfMonth);
-  }).sort((a, b) => a.date.localeCompare(b.date) || (a.time || '').localeCompare(b.time || ''));
+  }).sort((a, b) => a.date.localeCompare(b.date) || getPriorityOrder(a.priority) - getPriorityOrder(b.priority) || (a.time || '').localeCompare(b.time || ''));
 
   if (upcoming.length === 0) {
     els.horizonList.innerHTML = '<li class="empty-state">Nothing upcoming this month.</li>';
@@ -152,7 +294,12 @@ function renderHorizon(today) {
     const d = new Date(dateStr + 'T00:00:00');
     html += `<div class="horizon-date-group"><div class="horizon-date-label">${formatShortDate(d)}</div>`;
     groups[dateStr].forEach(e => {
-      html += `<li class="cat-${e.category}">
+      html += `<li class="cat-${e.category}${e.completed ? ' completed' : ''}" draggable="true" data-event-id="${e.id}">
+        <label class="checkbox-wrapper" title="Mark ${e.completed ? 'incomplete' : 'complete'}">
+          <input type="checkbox" class="task-checkbox" data-id="${e.id}" ${e.completed ? 'checked' : ''}>
+          <span class="checkmark"></span>
+        </label>
+        ${getPriorityIcon(e.priority)}
         ${e.time ? `<span class="event-item-time">${formatTime(e.time)}</span>` : ''}
         <span class="event-item-title">${escapeHtml(e.title)}</span>
         <button class="event-item-delete" data-id="${e.id}" title="Delete">&times;</button>
@@ -162,12 +309,7 @@ function renderHorizon(today) {
   });
 
   els.horizonList.innerHTML = html;
-  els.horizonList.querySelectorAll('.event-item-delete').forEach(btn => {
-    btn.addEventListener('click', (ev) => {
-      ev.stopPropagation();
-      deleteEvent(btn.dataset.id);
-    });
-  });
+  bindObjectiveEvents(els.horizonList);
 }
 
 function renderMonthView() {
@@ -181,7 +323,6 @@ function renderMonthView() {
   let html = '';
 
   // Previous month padding
-  const prevMonthLast = new Date(year, month, 0);
   for (let i = startDay - 1; i >= 0; i--) {
     const d = new Date(year, month, -i);
     const dateStr = formatDate(d);
@@ -209,11 +350,53 @@ function renderMonthView() {
 
   els.calendarDays.innerHTML = html;
 
-  // Add click handlers
+  // Add click + drag handlers
   els.calendarDays.querySelectorAll('.calendar-day').forEach(cell => {
-    cell.addEventListener('click', () => {
+    cell.addEventListener('click', (e) => {
+      // Don't open modal if clicking on a checkbox
+      if (e.target.classList.contains('task-checkbox') || e.target.classList.contains('checkmark')) return;
       state.selectedDate = new Date(cell.dataset.date + 'T00:00:00');
       openModal(cell.dataset.date);
+    });
+
+    // Drag-to-reschedule: drop targets
+    cell.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      cell.classList.add('drag-over');
+    });
+    cell.addEventListener('dragleave', () => {
+      cell.classList.remove('drag-over');
+    });
+    cell.addEventListener('drop', (e) => {
+      e.preventDefault();
+      cell.classList.remove('drag-over');
+      if (state.draggedEvent) {
+        rescheduleEvent(state.draggedEvent, cell.dataset.date);
+      }
+    });
+  });
+
+  // Make individual day events draggable
+  els.calendarDays.querySelectorAll('.day-event[data-event-id]').forEach(el => {
+    el.addEventListener('dragstart', (e) => {
+      e.stopPropagation();
+      state.draggedEvent = el.dataset.eventId;
+      e.dataTransfer.effectAllowed = 'move';
+      el.classList.add('dragging');
+    });
+    el.addEventListener('dragend', () => {
+      state.draggedEvent = null;
+      el.classList.remove('dragging');
+    });
+  });
+
+  // Checkbox handlers in month view
+  els.calendarDays.querySelectorAll('.task-checkbox').forEach(cb => {
+    cb.addEventListener('click', (e) => e.stopPropagation());
+    cb.addEventListener('change', (e) => {
+      e.stopPropagation();
+      toggleEventComplete(cb.dataset.id);
     });
   });
 }
@@ -224,10 +407,24 @@ function buildDayCell(date, events, otherMonth, isToday) {
   if (otherMonth) classes.push('other-month');
   if (isToday) classes.push('today');
 
+  // Progress mini-indicator
+  const progress = getProgressForDate(dateStr);
+  let progressIndicator = '';
+  if (progress.total > 0) {
+    progressIndicator = `<div class="day-progress"><div class="day-progress-fill${progress.percent === 100 ? ' complete' : ''}" style="width:${progress.percent}%"></div></div>`;
+  }
+
   let eventsHtml = '';
   const maxShow = 3;
-  events.slice(0, maxShow).forEach(e => {
-    eventsHtml += `<div class="day-event cat-${e.category}">${e.time ? formatTime(e.time) + ' ' : ''}${escapeHtml(e.title)}</div>`;
+  const sorted = events.sort((a, b) => getPriorityOrder(a.priority) - getPriorityOrder(b.priority));
+  sorted.slice(0, maxShow).forEach(e => {
+    eventsHtml += `<div class="day-event cat-${e.category}${e.completed ? ' completed' : ''}" draggable="true" data-event-id="${e.id}">
+      <label class="checkbox-mini" onclick="event.stopPropagation()">
+        <input type="checkbox" class="task-checkbox" data-id="${e.id}" ${e.completed ? 'checked' : ''}>
+        <span class="checkmark-mini"></span>
+      </label>
+      ${e.time ? formatTime(e.time) + ' ' : ''}${escapeHtml(e.title)}
+    </div>`;
   });
   if (events.length > maxShow) {
     eventsHtml += `<div class="day-event-more">+${events.length - maxShow} more</div>`;
@@ -235,6 +432,7 @@ function buildDayCell(date, events, otherMonth, isToday) {
 
   return `<div class="${classes.join(' ')}" data-date="${dateStr}">
     <div class="day-number">${date.getDate()}</div>
+    ${progressIndicator}
     <div class="day-events">${eventsHtml}</div>
   </div>`;
 }
@@ -251,17 +449,25 @@ function renderWeekView() {
     const d = new Date(sunday);
     d.setDate(sunday.getDate() + i);
     const dateStr = formatDate(d);
-    const events = getEventsForDate(dateStr);
+    const events = getEventsForDate(dateStr)
+      .sort((a, b) => getPriorityOrder(a.priority) - getPriorityOrder(b.priority) || (a.time || '').localeCompare(b.time || ''));
     const isToday = sameDay(d, today);
     const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const progress = getProgressForDate(dateStr);
 
     html += `<div class="week-day-row${isToday ? ' today' : ''}" data-date="${dateStr}">
       <div class="week-day-label">
         <span class="week-day-name">${dayNames[i]}</span>
         <span class="week-day-date">${d.getDate()}</span>
+        ${progress.total > 0 ? `<span class="week-progress-badge${progress.percent === 100 ? ' complete' : ''}">${progress.completed}/${progress.total}</span>` : ''}
       </div>
       <div class="week-day-events">
-        ${events.map(e => `<div class="week-event cat-${e.category}">
+        ${events.map(e => `<div class="week-event cat-${e.category}${e.completed ? ' completed' : ''}" draggable="true" data-event-id="${e.id}">
+          <label class="checkbox-wrapper-sm" onclick="event.stopPropagation()">
+            <input type="checkbox" class="task-checkbox" data-id="${e.id}" ${e.completed ? 'checked' : ''}>
+            <span class="checkmark-sm"></span>
+          </label>
+          ${getPriorityIcon(e.priority)}
           ${e.time ? `<span class="week-event-time">${formatTime(e.time)}</span>` : ''}
           ${escapeHtml(e.title)}
         </div>`).join('')}
@@ -270,15 +476,129 @@ function renderWeekView() {
   }
 
   els.weekGrid.innerHTML = html;
+
   els.weekGrid.querySelectorAll('.week-day-row').forEach(row => {
-    row.addEventListener('click', () => {
+    row.addEventListener('click', (e) => {
+      if (e.target.classList.contains('task-checkbox') || e.target.classList.contains('checkmark-sm')) return;
       openModal(row.dataset.date);
+    });
+
+    // Drop targets for week view
+    row.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      row.classList.add('drag-over');
+    });
+    row.addEventListener('dragleave', () => {
+      row.classList.remove('drag-over');
+    });
+    row.addEventListener('drop', (e) => {
+      e.preventDefault();
+      row.classList.remove('drag-over');
+      if (state.draggedEvent) {
+        rescheduleEvent(state.draggedEvent, row.dataset.date);
+      }
+    });
+  });
+
+  // Draggable week events
+  els.weekGrid.querySelectorAll('.week-event[data-event-id]').forEach(el => {
+    el.addEventListener('dragstart', (e) => {
+      e.stopPropagation();
+      state.draggedEvent = el.dataset.eventId;
+      e.dataTransfer.effectAllowed = 'move';
+      el.classList.add('dragging');
+    });
+    el.addEventListener('dragend', () => {
+      state.draggedEvent = null;
+      el.classList.remove('dragging');
+    });
+  });
+
+  // Week view checkbox handlers
+  els.weekGrid.querySelectorAll('.task-checkbox').forEach(cb => {
+    cb.addEventListener('click', (e) => e.stopPropagation());
+    cb.addEventListener('change', (e) => {
+      e.stopPropagation();
+      toggleEventComplete(cb.dataset.id);
+    });
+  });
+}
+
+// ===== Drag-to-Reschedule =====
+function rescheduleEvent(eventId, newDate) {
+  const event = state.events.find(e => e.id === eventId);
+  if (event && event.date !== newDate) {
+    event.date = newDate;
+    saveEvents();
+    render();
+    addChatMessage(`Rescheduled "${event.title}" to ${formatDisplay(new Date(newDate + 'T00:00:00'))}.`, 'bot');
+  }
+  state.draggedEvent = null;
+}
+
+// ===== Focus Mode =====
+function toggleFocusMode() {
+  state.focusMode = !state.focusMode;
+  if (state.focusMode) {
+    renderFocusMode();
+    els.focusOverlay.classList.remove('hidden');
+    document.body.classList.add('focus-active');
+  } else {
+    els.focusOverlay.classList.add('hidden');
+    document.body.classList.remove('focus-active');
+  }
+}
+
+function renderFocusMode() {
+  const todayStr = formatDate(new Date());
+  const events = getEventsForDate(todayStr)
+    .sort((a, b) => getPriorityOrder(a.priority) - getPriorityOrder(b.priority) || (a.time || '').localeCompare(b.time || ''));
+  const progress = getProgressForDate(todayStr);
+
+  if (els.focusProgressFill) {
+    els.focusProgressFill.style.width = `${progress.percent}%`;
+    els.focusProgressFill.className = 'progress-fill' + (progress.percent === 100 ? ' complete' : '');
+  }
+  if (els.focusProgressText) {
+    els.focusProgressText.textContent = progress.total > 0 ? `${progress.completed}/${progress.total} completed (${progress.percent}%)` : 'No tasks for today';
+  }
+
+  if (events.length === 0) {
+    els.focusList.innerHTML = '<div class="focus-empty">No tasks for today. Enjoy your free time!</div>';
+    return;
+  }
+
+  els.focusList.innerHTML = events.map(e => `
+    <div class="focus-task${e.completed ? ' completed' : ''}" data-id="${e.id}">
+      <label class="checkbox-wrapper focus-checkbox">
+        <input type="checkbox" class="task-checkbox" data-id="${e.id}" ${e.completed ? 'checked' : ''}>
+        <span class="checkmark"></span>
+      </label>
+      <div class="focus-task-info">
+        <div class="focus-task-header">
+          ${getPriorityIcon(e.priority)}
+          <span class="focus-task-title">${escapeHtml(e.title)}</span>
+        </div>
+        <div class="focus-task-meta">
+          <span class="cat-badge cat-${e.category}">${e.category}</span>
+          ${e.time ? `<span class="focus-task-time">${formatTime(e.time)}</span>` : ''}
+        </div>
+      </div>
+    </div>
+  `).join('');
+
+  els.focusList.querySelectorAll('.task-checkbox').forEach(cb => {
+    cb.addEventListener('change', () => {
+      toggleEventComplete(cb.dataset.id);
     });
   });
 }
 
 // ===== Events CRUD =====
 function addEvent(event) {
+  event.completed = event.completed || false;
+  event.priority = event.priority || 'medium';
   state.events.push(event);
   saveEvents();
   render();
@@ -288,6 +608,7 @@ function deleteEvent(id) {
   state.events = state.events.filter(e => e.id !== id);
   saveEvents();
   render();
+  if (state.focusMode) renderFocusMode();
 }
 
 // ===== Modal =====
@@ -296,6 +617,7 @@ function openModal(dateStr) {
   els.eventTitle.value = '';
   els.eventTime.value = '';
   els.eventCategory.value = 'objective';
+  els.eventPriority.value = 'medium';
   els.modalTitle.textContent = 'Add Event';
   els.modalOverlay.classList.remove('hidden');
   els.eventTitle.focus();
@@ -307,7 +629,7 @@ function closeModal() {
 
 // ===== Chat Parser =====
 function parseChat(text) {
-  const result = { title: '', date: null, time: null, category: 'objective' };
+  const result = { title: '', date: null, time: null, category: 'objective', priority: 'medium' };
   const lower = text.toLowerCase();
 
   // Detect category
@@ -322,7 +644,13 @@ function parseChat(text) {
            lower.includes('doctor') || lower.includes('dentist') || lower.includes('haircut'))
     result.category = 'personal';
 
-  // Parse time - look for patterns like "at 2pm", "at 14:00", "at 2:30 pm"
+  // Detect priority
+  if (lower.includes('urgent') || lower.includes('important') || lower.includes('critical') || lower.includes('high priority') || lower.includes('asap'))
+    result.priority = 'high';
+  else if (lower.includes('low priority') || lower.includes('whenever') || lower.includes('not urgent') || lower.includes('optional'))
+    result.priority = 'low';
+
+  // Parse time
   const timePatterns = [
     /\bat\s+(\d{1,2}):(\d{2})\s*(am|pm)/i,
     /\bat\s+(\d{1,2})\s*(am|pm)/i,
@@ -350,18 +678,13 @@ function parseChat(text) {
   const today = new Date();
   const todayStr = formatDate(today);
 
-  // "today"
   if (lower.includes('today')) {
     result.date = todayStr;
-  }
-  // "tomorrow"
-  else if (lower.includes('tomorrow')) {
+  } else if (lower.includes('tomorrow')) {
     const d = new Date(today);
     d.setDate(d.getDate() + 1);
     result.date = formatDate(d);
-  }
-  // Day names: "on Monday", "next Friday", etc.
-  else {
+  } else {
     const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
     const dayMatch = lower.match(new RegExp(`\\b(next\\s+)?(${dayNames.join('|')})\\b`));
     if (dayMatch) {
@@ -375,7 +698,7 @@ function parseChat(text) {
     }
   }
 
-  // Explicit dates: "March 25", "March 25th", "3/25", "2026-03-25"
+  // Explicit dates
   const monthNames = ['january', 'february', 'march', 'april', 'may', 'june',
     'july', 'august', 'september', 'october', 'november', 'december'];
   const monthPattern = new RegExp(`\\b(${monthNames.join('|')})\\s+(\\d{1,2})(?:st|nd|rd|th)?(?:\\s*,?\\s*(\\d{4}))?`, 'i');
@@ -387,7 +710,6 @@ function parseChat(text) {
     result.date = `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
   }
 
-  // Numeric date: "3/25" or "03/25"
   const numDateMatch = text.match(/\b(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b/);
   if (numDateMatch && !result.date) {
     const m = parseInt(numDateMatch[1]);
@@ -397,23 +719,21 @@ function parseChat(text) {
     result.date = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
   }
 
-  // Default to today if no date found
   if (!result.date) {
     result.date = todayStr;
   }
 
-  // Clean title - remove date/time fragments
+  // Clean title
   let title = text;
-  // Remove common filler phrases
   title = title.replace(/\b(on|at|by|for|next|this)\s+(sunday|monday|tuesday|wednesday|thursday|friday|saturday)/gi, '');
   title = title.replace(/\b(today|tomorrow)\b/gi, '');
   title = title.replace(monthPattern, '');
   title = title.replace(/\b\d{1,2}\/\d{1,2}(\/\d{2,4})?\b/, '');
   title = title.replace(/\bat\s+\d{1,2}(:\d{2})?\s*(am|pm)?\b/gi, '');
   title = title.replace(/\b\d{1,2}(:\d{2})?\s*(am|pm)\b/gi, '');
+  title = title.replace(/\b(urgent|important|critical|high priority|low priority|asap|not urgent|optional|whenever)\b/gi, '');
   title = title.replace(/\s{2,}/g, ' ').trim();
 
-  // Capitalize first letter
   if (title) {
     title = title.charAt(0).toUpperCase() + title.slice(1);
   }
@@ -425,10 +745,8 @@ function parseChat(text) {
 function handleChat(text) {
   if (!text.trim()) return;
 
-  // Add user message
   addChatMessage(text, 'user');
 
-  // Parse
   const parsed = parseChat(text);
   const event = {
     id: generateId(),
@@ -436,11 +754,12 @@ function handleChat(text) {
     date: parsed.date,
     time: parsed.time,
     category: parsed.category,
+    priority: parsed.priority,
+    completed: false,
   };
 
   addEvent(event);
 
-  // Build response
   const dateObj = new Date(event.date + 'T00:00:00');
   const dateDisplay = formatDisplay(dateObj);
   const timeDisplay = event.time ? ` at ${formatTime(event.time)}` : '';
@@ -448,8 +767,9 @@ function handleChat(text) {
     objective: 'objective', meeting: 'meeting', deadline: 'deadline',
     reminder: 'reminder', personal: 'personal event'
   };
+  const priorityLabel = event.priority !== 'medium' ? ` [${event.priority} priority]` : '';
 
-  const response = `Added "${event.title}" as a ${categoryLabels[event.category]} on ${dateDisplay}${timeDisplay}.`;
+  const response = `Added "${event.title}" as a ${categoryLabels[event.category]} on ${dateDisplay}${timeDisplay}${priorityLabel}.`;
   addChatMessage(response, 'bot');
 
   els.chatInput.value = '';
@@ -519,6 +839,8 @@ els.eventForm.addEventListener('submit', (e) => {
     date: els.eventDate.value,
     time: els.eventTime.value || null,
     category: els.eventCategory.value,
+    priority: els.eventPriority.value,
+    completed: false,
   };
   if (event.title) {
     addEvent(event);
@@ -531,9 +853,16 @@ els.modalOverlay.addEventListener('click', (e) => {
   if (e.target === els.modalOverlay) closeModal();
 });
 
-// Close modal on Escape
+// Focus mode toggle
+els.focusToggle.addEventListener('click', toggleFocusMode);
+els.focusClose.addEventListener('click', toggleFocusMode);
+
+// Close modals on Escape
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') closeModal();
+  if (e.key === 'Escape') {
+    if (state.focusMode) toggleFocusMode();
+    else closeModal();
+  }
 });
 
 // ===== Live Clock Update =====

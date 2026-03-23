@@ -43,9 +43,10 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 24px;
+  padding: 12px 24px;
   background: var(--surface);
   border-bottom: 1px solid var(--border);
+  gap: 16px;
 }
 
 .header h1 {
@@ -54,11 +55,106 @@ body {
   background: linear-gradient(135deg, var(--primary), var(--accent-purple));
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
+  white-space: nowrap;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 16px;
 }
 
 .current-date {
   color: var(--text-muted);
   font-size: 0.9rem;
+  white-space: nowrap;
+}
+
+/* ===== Progress Bar ===== */
+.progress-container {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.progress-track {
+  width: 120px;
+  height: 6px;
+  background: var(--surface-2);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.progress-track.large {
+  width: 100%;
+  height: 10px;
+  border-radius: 5px;
+}
+
+.progress-fill {
+  height: 100%;
+  background: var(--primary);
+  border-radius: 3px;
+  transition: width 0.4s ease, background 0.3s;
+  width: 0%;
+}
+
+.progress-fill.complete {
+  background: var(--accent-green);
+}
+
+.progress-text {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+/* ===== Streak Display ===== */
+.streak-display {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.streak-flame {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--accent-orange);
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+
+.streak-flame svg {
+  color: var(--accent-orange);
+}
+
+.streak-best {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
+/* ===== Focus Mode Button ===== */
+.focus-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 500;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.focus-btn:hover {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: white;
 }
 
 /* ===== Main Layout ===== */
@@ -108,9 +204,25 @@ body {
   font-size: 0.85rem;
   border-left: 3px solid var(--primary);
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 8px;
   position: relative;
+  transition: opacity 0.2s, transform 0.2s;
+  cursor: grab;
+}
+
+.objectives-list li.completed, .horizon-list li.completed {
+  opacity: 0.5;
+}
+
+.objectives-list li.completed .event-item-title,
+.horizon-list li.completed .event-item-title {
+  text-decoration: line-through;
+}
+
+.objectives-list li.dragging, .horizon-list li.dragging {
+  opacity: 0.3;
+  transform: scale(0.95);
 }
 
 .objectives-list li.empty-state,
@@ -118,6 +230,7 @@ body {
   border-left-color: var(--border);
   color: var(--text-muted);
   font-style: italic;
+  cursor: default;
 }
 
 .event-item-time {
@@ -129,6 +242,7 @@ body {
 
 .event-item-title {
   flex: 1;
+  transition: text-decoration 0.2s;
 }
 
 .event-item-delete {
@@ -150,6 +264,158 @@ body {
 
 .event-item-delete:hover {
   color: var(--accent-red);
+}
+
+/* ===== Checkbox Styles ===== */
+.checkbox-wrapper, .checkbox-wrapper-sm {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.checkbox-wrapper input, .checkbox-wrapper-sm input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.checkmark {
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--border);
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+
+.checkmark::after {
+  content: '';
+  width: 5px;
+  height: 9px;
+  border: solid white;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg) scale(0);
+  transition: transform 0.15s;
+  margin-top: -2px;
+}
+
+.checkbox-wrapper input:checked + .checkmark {
+  background: var(--accent-green);
+  border-color: var(--accent-green);
+}
+
+.checkbox-wrapper input:checked + .checkmark::after {
+  transform: rotate(45deg) scale(1);
+}
+
+.checkmark-sm {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--border);
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+
+.checkmark-sm::after {
+  content: '';
+  width: 4px;
+  height: 7px;
+  border: solid white;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg) scale(0);
+  transition: transform 0.15s;
+  margin-top: -1px;
+}
+
+.checkbox-wrapper-sm input:checked + .checkmark-sm {
+  background: var(--accent-green);
+  border-color: var(--accent-green);
+}
+
+.checkbox-wrapper-sm input:checked + .checkmark-sm::after {
+  transform: rotate(45deg) scale(1);
+}
+
+/* Mini checkbox for month view */
+.checkbox-mini {
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  margin-right: 2px;
+}
+
+.checkbox-mini input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.checkmark-mini {
+  width: 10px;
+  height: 10px;
+  border: 1.5px solid var(--border);
+  border-radius: 2px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+
+.checkmark-mini::after {
+  content: '';
+  width: 3px;
+  height: 5px;
+  border: solid white;
+  border-width: 0 1.5px 1.5px 0;
+  transform: rotate(45deg) scale(0);
+  transition: transform 0.15s;
+  margin-top: -1px;
+}
+
+.checkbox-mini input:checked + .checkmark-mini {
+  background: var(--accent-green);
+  border-color: var(--accent-green);
+}
+
+.checkbox-mini input:checked + .checkmark-mini::after {
+  transform: rotate(45deg) scale(1);
+}
+
+/* ===== Priority Icons ===== */
+.priority-icon {
+  font-size: 0.65rem;
+  font-weight: 800;
+  border-radius: 3px;
+  padding: 1px 4px;
+  flex-shrink: 0;
+  letter-spacing: -0.5px;
+}
+
+.priority-high {
+  color: var(--accent-red);
+  background: rgba(239,68,68,0.15);
+}
+
+.priority-medium {
+  color: var(--accent-orange);
+  background: rgba(245,158,11,0.15);
+}
+
+.priority-low {
+  color: var(--accent-blue);
+  background: rgba(59,130,246,0.15);
 }
 
 /* Category colors */
@@ -273,7 +539,7 @@ body {
   background: var(--surface);
   border-radius: 4px;
   cursor: pointer;
-  transition: background 0.15s;
+  transition: background 0.15s, box-shadow 0.2s;
   position: relative;
 }
 
@@ -294,10 +560,41 @@ body {
   box-shadow: inset 0 0 0 1px var(--primary);
 }
 
+/* Drag-over state */
+.calendar-day.drag-over {
+  background: rgba(108, 99, 255, 0.15);
+  box-shadow: inset 0 0 0 2px var(--primary);
+}
+
+.week-day-row.drag-over {
+  background: rgba(108, 99, 255, 0.15);
+  box-shadow: inset 0 0 0 2px var(--primary);
+}
+
 .day-number {
   font-size: 0.8rem;
   font-weight: 600;
-  margin-bottom: 4px;
+  margin-bottom: 2px;
+}
+
+/* Day-level progress bar */
+.day-progress {
+  height: 2px;
+  background: var(--surface-2);
+  border-radius: 1px;
+  margin-bottom: 3px;
+  overflow: hidden;
+}
+
+.day-progress-fill {
+  height: 100%;
+  background: var(--primary);
+  border-radius: 1px;
+  transition: width 0.3s;
+}
+
+.day-progress-fill.complete {
+  background: var(--accent-green);
 }
 
 .day-events {
@@ -313,7 +610,20 @@ body {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  cursor: pointer;
+  cursor: grab;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  transition: opacity 0.2s;
+}
+
+.day-event.completed {
+  opacity: 0.45;
+  text-decoration: line-through;
+}
+
+.day-event.dragging {
+  opacity: 0.3;
 }
 
 .day-event.cat-objective { background: rgba(168,85,247,0.2); color: var(--accent-purple); }
@@ -341,7 +651,7 @@ body {
   border-radius: var(--radius);
   min-height: 80px;
   cursor: pointer;
-  transition: background 0.15s;
+  transition: background 0.15s, box-shadow 0.2s;
 }
 
 .week-day-row:hover {
@@ -358,6 +668,7 @@ body {
   border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
+  gap: 2px;
 }
 
 .week-day-name {
@@ -370,6 +681,20 @@ body {
 .week-day-date {
   font-size: 1.2rem;
   font-weight: 700;
+}
+
+.week-progress-badge {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  background: var(--surface-2);
+  padding: 1px 6px;
+  border-radius: 8px;
+  width: fit-content;
+}
+
+.week-progress-badge.complete {
+  background: rgba(34,197,94,0.2);
+  color: var(--accent-green);
 }
 
 .week-day-events {
@@ -389,6 +714,17 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  cursor: grab;
+  transition: opacity 0.2s;
+}
+
+.week-event.completed {
+  opacity: 0.45;
+  text-decoration: line-through;
+}
+
+.week-event.dragging {
+  opacity: 0.3;
 }
 
 .week-event.cat-objective { background: rgba(168,85,247,0.15); color: var(--accent-purple); }
@@ -568,6 +904,181 @@ body {
   color: white;
 }
 
+/* ===== Focus Mode Overlay ===== */
+.focus-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 17, 23, 0.95);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  backdrop-filter: blur(8px);
+  animation: focusFadeIn 0.3s ease;
+}
+
+.focus-overlay.hidden {
+  display: none;
+}
+
+@keyframes focusFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.focus-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 32px;
+  width: 520px;
+  max-width: 90vw;
+  max-height: 80vh;
+  overflow-y: auto;
+  box-shadow: 0 24px 80px rgba(0,0,0,0.5);
+  animation: focusSlideUp 0.3s ease;
+}
+
+@keyframes focusSlideUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.focus-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+  position: relative;
+}
+
+.focus-header h2 {
+  font-size: 1.3rem;
+  font-weight: 700;
+  background: linear-gradient(135deg, var(--primary), var(--accent-purple));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.focus-subtitle {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.focus-close-btn {
+  position: absolute;
+  right: 0;
+  top: 0;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 1.5rem;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: var(--radius);
+  transition: all 0.2s;
+}
+
+.focus-close-btn:hover {
+  color: var(--text);
+  background: var(--surface-2);
+}
+
+.focus-progress {
+  margin-bottom: 24px;
+}
+
+.focus-progress .progress-text {
+  display: block;
+  margin-top: 8px;
+  text-align: center;
+}
+
+.focus-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.focus-task {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  background: var(--surface-2);
+  border-radius: var(--radius);
+  transition: all 0.2s;
+}
+
+.focus-task:hover {
+  background: var(--border);
+}
+
+.focus-task.completed {
+  opacity: 0.5;
+}
+
+.focus-task.completed .focus-task-title {
+  text-decoration: line-through;
+}
+
+.focus-task-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.focus-task-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.focus-task-title {
+  font-size: 0.95rem;
+  font-weight: 500;
+  transition: text-decoration 0.2s;
+}
+
+.focus-task-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cat-badge {
+  font-size: 0.65rem;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.cat-badge.cat-objective { background: rgba(168,85,247,0.2); color: var(--accent-purple); }
+.cat-badge.cat-meeting { background: rgba(59,130,246,0.2); color: var(--accent-blue); }
+.cat-badge.cat-deadline { background: rgba(239,68,68,0.2); color: var(--accent-red); }
+.cat-badge.cat-reminder { background: rgba(245,158,11,0.2); color: var(--accent-orange); }
+.cat-badge.cat-personal { background: rgba(34,197,94,0.2); color: var(--accent-green); }
+
+.focus-task-time {
+  font-size: 0.75rem;
+  color: var(--accent-blue);
+  font-weight: 600;
+}
+
+.focus-empty {
+  text-align: center;
+  color: var(--text-muted);
+  font-style: italic;
+  padding: 40px 0;
+}
+
+.focus-checkbox .checkmark {
+  width: 22px;
+  height: 22px;
+}
+
 /* ===== Utilities ===== */
 .hidden { display: none !important; }
 
@@ -580,6 +1091,8 @@ body {
 /* ===== Responsive ===== */
 @media (max-width: 1100px) {
   .sidebar { width: 220px; min-width: 220px; }
+  .header-right { gap: 10px; }
+  .progress-track { width: 80px; }
 }
 
 @media (max-width: 900px) {
@@ -597,5 +1110,15 @@ body {
   .sidebar:last-child {
     border-bottom: none;
     border-top: 1px solid var(--border);
+  }
+  .header {
+    flex-wrap: wrap;
+  }
+  .header-right {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .streak-display {
+    order: 3;
   }
 }
