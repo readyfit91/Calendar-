@@ -6,21 +6,21 @@
 }
 
 :root {
-  --bg: #0f1117;
-  --surface: #1a1d27;
-  --surface-2: #242835;
-  --border: #2e3345;
-  --text: #e4e6f0;
-  --text-muted: #8b8fa3;
-  --primary: #6c63ff;
-  --primary-hover: #7f78ff;
+  --bg: #f5f7fa;
+  --surface: #ffffff;
+  --surface-2: #eef1f6;
+  --border: #d4d8e1;
+  --text: #2c2c2c;
+  --text-muted: #9b9b9b;
+  --primary: #3ba4dc;
+  --primary-hover: #2e8fc4;
   --accent-green: #22c55e;
   --accent-orange: #f59e0b;
   --accent-red: #ef4444;
-  --accent-blue: #3b82f6;
-  --accent-purple: #a855f7;
+  --accent-blue: #3ba4dc;
+  --accent-purple: #3ba4dc;
   --radius: 8px;
-  --shadow: 0 4px 24px rgba(0,0,0,0.3);
+  --shadow: 0 4px 24px rgba(0,0,0,0.08);
 }
 
 body {
@@ -606,7 +606,7 @@ body {
   position: sticky;
   top: 0;
   z-index: 100;
-  background: linear-gradient(90deg, var(--accent-purple), #7c3aed, var(--accent-purple));
+  background: linear-gradient(90deg, #3ba4dc, #2e8fc4, #3ba4dc);
   color: #fff;
   overflow: hidden;
   white-space: nowrap;
@@ -1384,7 +1384,7 @@ body {
 .focus-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(15, 17, 23, 0.95);
+  background: rgba(245, 247, 250, 0.95);
   display: flex;
   align-items: center;
   justify-content: center;
