@@ -23,11 +23,10 @@ function showSyncStatus(status) {
     el.style.background = '#34d399'; el.style.color = '#000'; el.style.opacity = '1';
     _syncStatusTimer = setTimeout(() => { el.style.opacity = '0'; }, 1500);
   } else {
-    // status is 'error' or an error message string
-    el.textContent = typeof status === 'string' && status.length > 15 ? status : 'Sync failed';
+    el.textContent = status;
     el.style.background = '#f87171'; el.style.color = '#fff'; el.style.opacity = '1';
     el.style.maxWidth = '90vw'; el.style.wordBreak = 'break-word';
-    _syncStatusTimer = setTimeout(() => { el.style.opacity = '0'; }, 5000);
+    _syncStatusTimer = setTimeout(() => { el.style.opacity = '0'; }, 8000);
   }
 }
 
@@ -352,22 +351,21 @@ function rowToEvent(row) {
 }
 
 async function syncEventToSupabase(event) {
-  if (!state.user) return;
+  if (!state.user) { showSyncStatus('No user logged in'); return; }
   showSyncStatus('syncing');
   try {
     const row = eventToRow(event);
-    console.log('Syncing event to Supabase:', JSON.stringify(row));
-    const { error, status, statusText } = await db.from('calendar_events').upsert(row, { onConflict: 'id' });
+    const { error, status } = await db.from('calendar_events').upsert(row, { onConflict: 'id' });
     if (error) {
-      console.error('syncEvent error:', error.message, error.details, error.hint, error.code, 'status:', status, statusText);
-      showSyncStatus(`Sync error: ${error.message || error.code || status}`);
+      const msg = `${error.message} | ${error.details || ''} | ${error.hint || ''} | code:${error.code} | http:${status}`;
+      alert('SYNC ERROR: ' + msg);
+      showSyncStatus(msg);
     } else {
-      console.log('syncEvent success, status:', status);
       showSyncStatus('saved');
     }
   } catch (err) {
-    console.error('syncEvent exception:', err);
-    showSyncStatus(`Sync error: ${err.message}`);
+    alert('SYNC EXCEPTION: ' + err.message);
+    showSyncStatus(err.message);
   }
 }
 
@@ -375,16 +373,17 @@ async function deleteEventFromSupabase(id) {
   if (!state.user) return;
   showSyncStatus('syncing');
   try {
-    const { error } = await db.from('calendar_events').delete().eq('id', id).eq('user_id', state.user.id);
+    const { error, status } = await db.from('calendar_events').delete().eq('id', id).eq('user_id', state.user.id);
     if (error) {
-      console.error('deleteEvent error:', error.message);
-      showSyncStatus('error');
+      const msg = `Delete: ${error.message} | code:${error.code} | http:${status}`;
+      alert('DELETE ERROR: ' + msg);
+      showSyncStatus(msg);
     } else {
       showSyncStatus('saved');
     }
   } catch (err) {
-    console.error('deleteEvent failed:', err.message);
-    showSyncStatus('error');
+    alert('DELETE EXCEPTION: ' + err.message);
+    showSyncStatus(err.message);
   }
 }
 
