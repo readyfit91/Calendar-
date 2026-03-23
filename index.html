@@ -10,7 +10,14 @@
   <div class="app">
     <!-- Header -->
     <header class="header">
-      <h1>My Calendar</h1>
+      <div class="header-left">
+        <h1>My Calendar</h1>
+        <div class="streak-badge" id="streakBadge" title="Completion streak">
+          <span class="streak-icon">&#9889;</span>
+          <span class="streak-count" id="streakCount">0</span>
+          <span class="streak-label">day streak</span>
+        </div>
+      </div>
       <div class="current-date" id="currentDate"></div>
     </header>
 
@@ -19,6 +26,19 @@
       <aside class="sidebar daily-panel">
         <h2>Today's Objectives</h2>
         <div class="date-label" id="todayLabel"></div>
+
+        <!-- Progress Bar -->
+        <div class="progress-container" id="progressContainer">
+          <div class="progress-header">
+            <span class="progress-text" id="progressText">0 / 0 completed</span>
+            <span class="progress-percent" id="progressPercent">0%</span>
+          </div>
+          <div class="progress-bar">
+            <div class="progress-fill" id="progressFill"></div>
+          </div>
+          <div class="progress-message" id="progressMessage"></div>
+        </div>
+
         <ul class="objectives-list" id="dailyObjectives">
           <li class="empty-state">No objectives for today. Use the chat to add some!</li>
         </ul>
@@ -63,6 +83,15 @@
       <aside class="sidebar horizon-panel">
         <h2>On the Horizon</h2>
         <div class="horizon-label" id="horizonLabel"></div>
+
+        <!-- Overdue Section -->
+        <div class="overdue-section hidden" id="overdueSection">
+          <div class="overdue-header">
+            <span class="overdue-icon">&#9888;</span> Overdue Tasks
+          </div>
+          <ul class="overdue-list" id="overdueList"></ul>
+        </div>
+
         <ul class="horizon-list" id="horizonList">
           <li class="empty-state">Nothing upcoming this month yet.</li>
         </ul>
@@ -75,8 +104,9 @@
         <div class="chat-message bot">
           <span>Hi! Tell me what to add to your calendar. Try things like:<br>
           <em>"Meeting with team on March 25 at 2pm"</em><br>
-          <em>"Finish report by Friday"</em><br>
-          <em>"Gym every Monday and Wednesday"</em></span>
+          <em>"Finish report by Friday !high"</em><br>
+          <em>"Gym every Monday and Wednesday !low"</em><br>
+          Add <strong>!high</strong>, <strong>!medium</strong>, or <strong>!low</strong> to set priority.</span>
         </div>
       </div>
       <div class="chat-input-area">
@@ -109,11 +139,26 @@
             <option value="personal">Personal</option>
           </select>
         </label>
+        <label>Priority
+          <select id="eventPriority">
+            <option value="medium">Medium</option>
+            <option value="high">High</option>
+            <option value="low">Low</option>
+          </select>
+        </label>
         <div class="modal-actions">
           <button type="button" id="modalCancel">Cancel</button>
           <button type="submit">Save</button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- Completion Celebration Overlay -->
+  <div class="celebration hidden" id="celebration">
+    <div class="celebration-content">
+      <div class="celebration-emoji">&#127881;</div>
+      <div class="celebration-text">All tasks complete!</div>
     </div>
   </div>
 

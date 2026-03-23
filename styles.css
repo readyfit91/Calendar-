@@ -48,6 +48,12 @@ body {
   border-bottom: 1px solid var(--border);
 }
 
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
 .header h1 {
   font-size: 1.4rem;
   font-weight: 700;
@@ -61,6 +67,39 @@ body {
   font-size: 0.9rem;
 }
 
+/* ===== Streak Badge ===== */
+.streak-badge {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  transition: all 0.3s;
+}
+
+.streak-badge.active {
+  background: rgba(245, 158, 11, 0.15);
+  border-color: var(--accent-orange);
+  color: var(--accent-orange);
+}
+
+.streak-icon {
+  font-size: 1rem;
+}
+
+.streak-count {
+  font-weight: 700;
+  font-size: 1rem;
+}
+
+.streak-label {
+  font-size: 0.7rem;
+}
+
 /* ===== Main Layout ===== */
 .main-layout {
   display: flex;
@@ -70,8 +109,8 @@ body {
 
 /* ===== Sidebars ===== */
 .sidebar {
-  width: 280px;
-  min-width: 280px;
+  width: 300px;
+  min-width: 300px;
   padding: 20px;
   background: var(--surface);
   border-right: 1px solid var(--border);
@@ -96,6 +135,73 @@ body {
   margin-bottom: 16px;
 }
 
+/* ===== Progress Bar ===== */
+.progress-container {
+  margin-bottom: 16px;
+  padding: 12px;
+  background: var(--surface-2);
+  border-radius: var(--radius);
+}
+
+.progress-container.no-tasks {
+  opacity: 0.6;
+}
+
+.progress-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.progress-text {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.progress-percent {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--primary);
+}
+
+.progress-bar {
+  height: 6px;
+  background: var(--border);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  width: 0%;
+  background: var(--primary);
+  border-radius: 3px;
+  transition: width 0.5s ease, background 0.3s;
+}
+
+.progress-fill.good {
+  background: var(--accent-blue);
+}
+
+.progress-fill.complete {
+  background: var(--accent-green);
+}
+
+.progress-message {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  margin-top: 6px;
+  font-style: italic;
+}
+
+.progress-message.celebrate {
+  color: var(--accent-green);
+  font-weight: 600;
+  font-style: normal;
+}
+
+/* ===== Task Lists ===== */
 .objectives-list, .horizon-list {
   list-style: none;
 }
@@ -108,9 +214,18 @@ body {
   font-size: 0.85rem;
   border-left: 3px solid var(--primary);
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 8px;
   position: relative;
+  transition: all 0.2s;
+}
+
+.objectives-list li:hover, .horizon-list li:hover {
+  background: #2a2e3d;
+}
+
+.objectives-list li.completed, .horizon-list li.completed {
+  opacity: 0.55;
 }
 
 .objectives-list li.empty-state,
@@ -118,6 +233,87 @@ body {
   border-left-color: var(--border);
   color: var(--text-muted);
   font-style: italic;
+}
+
+/* ===== Task Checkboxes ===== */
+.task-check {
+  width: 22px;
+  height: 22px;
+  min-width: 22px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  background: transparent;
+  color: transparent;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+  transition: all 0.2s;
+  padding: 0;
+}
+
+.task-check:hover {
+  border-color: var(--accent-green);
+  background: rgba(34, 197, 94, 0.1);
+}
+
+.task-check.checked {
+  border-color: var(--accent-green);
+  background: var(--accent-green);
+  color: white;
+}
+
+.task-check-sm {
+  width: 18px;
+  height: 18px;
+  min-width: 18px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  background: transparent;
+  color: transparent;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.6rem;
+  transition: all 0.2s;
+  padding: 0;
+}
+
+.task-check-sm:hover {
+  border-color: var(--accent-green);
+  background: rgba(34, 197, 94, 0.1);
+}
+
+.task-check-sm.checked {
+  border-color: var(--accent-green);
+  background: var(--accent-green);
+  color: white;
+}
+
+/* ===== Priority Indicators ===== */
+.priority-indicator {
+  font-size: 0.6rem;
+  line-height: 1;
+}
+
+.priority-high {
+  color: var(--accent-red);
+}
+
+.priority-low {
+  color: var(--text-muted);
+}
+
+.objectives-list li.priority-high {
+  border-left-width: 4px;
+}
+
+/* ===== Done state ===== */
+.event-item-title.done, .done-text {
+  text-decoration: line-through;
+  opacity: 0.6;
 }
 
 .event-item-time {
@@ -169,6 +365,81 @@ body {
   color: var(--primary);
   margin-bottom: 4px;
   text-transform: uppercase;
+}
+
+/* ===== Overdue Section ===== */
+.overdue-section {
+  margin-bottom: 16px;
+  padding: 12px;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  border-radius: var(--radius);
+}
+
+.overdue-header {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--accent-red);
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.overdue-icon {
+  font-size: 1rem;
+}
+
+.overdue-list {
+  list-style: none;
+}
+
+.overdue-item {
+  padding: 8px 10px;
+  margin-bottom: 6px;
+  background: var(--surface-2);
+  border-radius: 6px;
+  font-size: 0.8rem;
+  border-left: 3px solid var(--accent-red);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.overdue-item-content {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.overdue-age {
+  font-size: 0.65rem;
+  color: var(--accent-red);
+  background: rgba(239, 68, 68, 0.15);
+  padding: 1px 6px;
+  border-radius: 10px;
+  white-space: nowrap;
+}
+
+.overdue-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.overdue-reschedule {
+  background: none;
+  border: none;
+  color: var(--accent-blue);
+  cursor: pointer;
+  font-size: 1rem;
+  padding: 2px 4px;
+  border-radius: 4px;
+  transition: background 0.15s;
+}
+
+.overdue-reschedule:hover {
+  background: rgba(59, 130, 246, 0.15);
 }
 
 /* ===== Calendar Container ===== */
@@ -273,7 +544,7 @@ body {
   background: var(--surface);
   border-radius: 4px;
   cursor: pointer;
-  transition: background 0.15s;
+  transition: all 0.15s;
   position: relative;
 }
 
@@ -294,10 +565,45 @@ body {
   box-shadow: inset 0 0 0 1px var(--primary);
 }
 
+.calendar-day.all-done {
+  background: rgba(34, 197, 94, 0.06);
+}
+
+.calendar-day.has-overdue {
+  background: rgba(239, 68, 68, 0.06);
+}
+
+.calendar-day.drag-over {
+  background: rgba(108, 99, 255, 0.15);
+  box-shadow: inset 0 0 0 2px var(--primary);
+}
+
+.day-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
 .day-number {
   font-size: 0.8rem;
   font-weight: 600;
-  margin-bottom: 4px;
+}
+
+/* ===== Progress Dots on Calendar ===== */
+.progress-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--border);
+}
+
+.progress-dot.dot-partial {
+  background: var(--accent-orange);
+}
+
+.progress-dot.dot-complete {
+  background: var(--accent-green);
 }
 
 .day-events {
@@ -314,6 +620,11 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   cursor: pointer;
+}
+
+.day-event.done {
+  text-decoration: line-through;
+  opacity: 0.5;
 }
 
 .day-event.cat-objective { background: rgba(168,85,247,0.2); color: var(--accent-purple); }
@@ -341,7 +652,7 @@ body {
   border-radius: var(--radius);
   min-height: 80px;
   cursor: pointer;
-  transition: background 0.15s;
+  transition: all 0.15s;
 }
 
 .week-day-row:hover {
@@ -350,6 +661,19 @@ body {
 
 .week-day-row.today {
   border-left: 3px solid var(--primary);
+}
+
+.week-day-row.overdue {
+  border-left: 3px solid var(--accent-red);
+}
+
+.week-day-row.all-done {
+  border-left: 3px solid var(--accent-green);
+}
+
+.week-day-row.drag-over {
+  background: rgba(108, 99, 255, 0.12);
+  box-shadow: inset 0 0 0 2px var(--primary);
 }
 
 .week-day-label {
@@ -372,6 +696,12 @@ body {
   font-weight: 700;
 }
 
+.week-day-progress {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
 .week-day-events {
   flex: 1;
   padding: 8px 12px;
@@ -389,6 +719,20 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  transition: all 0.15s;
+  cursor: grab;
+}
+
+.week-event.done {
+  opacity: 0.5;
+}
+
+.week-event:active {
+  cursor: grabbing;
+}
+
+.week-event.dragging {
+  opacity: 0.4;
 }
 
 .week-event.cat-objective { background: rgba(168,85,247,0.15); color: var(--accent-purple); }
@@ -400,6 +744,11 @@ body {
 .week-event-time {
   font-weight: 600;
   font-size: 0.7rem;
+}
+
+/* ===== Dragging ===== */
+.dragging {
+  opacity: 0.4;
 }
 
 /* ===== Chatbox ===== */
@@ -568,6 +917,51 @@ body {
   color: white;
 }
 
+/* ===== Celebration ===== */
+.celebration {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  background: rgba(0, 0, 0, 0.4);
+  animation: celebFadeIn 0.3s ease;
+  pointer-events: none;
+}
+
+.celebration.hidden {
+  display: none;
+}
+
+.celebration-content {
+  text-align: center;
+  animation: celebBounce 0.5s ease;
+}
+
+.celebration-emoji {
+  font-size: 4rem;
+  margin-bottom: 12px;
+}
+
+.celebration-text {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--accent-green);
+  text-shadow: 0 2px 12px rgba(34, 197, 94, 0.4);
+}
+
+@keyframes celebFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes celebBounce {
+  0% { transform: scale(0.5); opacity: 0; }
+  60% { transform: scale(1.15); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
 /* ===== Utilities ===== */
 .hidden { display: none !important; }
 
@@ -579,7 +973,7 @@ body {
 
 /* ===== Responsive ===== */
 @media (max-width: 1100px) {
-  .sidebar { width: 220px; min-width: 220px; }
+  .sidebar { width: 240px; min-width: 240px; }
 }
 
 @media (max-width: 900px) {
