@@ -1316,8 +1316,73 @@ function parseChat(text) {
 }
 
 // ===== Query Detection =====
+function handleWhenIsQuery(name, type) {
+  const nameLower = name.toLowerCase().replace(/['']/g, '');
+  const typeLower = type.toLowerCase();
+  const today = new Date();
+  const todayTime = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
+
+  // Search events for matching name + type
+  const matches = state.events.filter(e => {
+    const titleLower = e.title.toLowerCase();
+    return titleLower.includes(nameLower) && titleLower.includes(typeLower);
+  });
+
+  if (matches.length === 0) {
+    addChatBotHtml(`<div class="query-response">
+      <p>I don't have a ${escapeHtml(type)} for <strong>${escapeHtml(name)}</strong> on the calendar.</p>
+      <p style="opacity:0.7;font-size:0.9em">Try adding it: e.g. "${escapeHtml(name)}'s ${escapeHtml(type)} March 15"</p>
+    </div>`);
+    return true;
+  }
+
+  const results = matches.map(e => {
+    const eventDate = new Date(e.date + 'T00:00:00');
+    let nextOccurrence = new Date(today.getFullYear(), eventDate.getMonth(), eventDate.getDate());
+    if (nextOccurrence.getTime() < todayTime) {
+      nextOccurrence = new Date(today.getFullYear() + 1, eventDate.getMonth(), eventDate.getDate());
+    }
+    const diffMs = nextOccurrence.getTime() - todayTime;
+    const daysUntil = Math.round(diffMs / (1000 * 60 * 60 * 24));
+    const originalYear = eventDate.getFullYear();
+    return { ...e, nextOccurrence, daysUntil, originalYear };
+  });
+
+  const matched = MARQUEE_KEYWORDS.find(k => typeLower.includes(k.keyword));
+  const icon = matched ? matched.icon : '\u{1F4C5}';
+
+  const cards = results.map(r => {
+    const dateStr = r.nextOccurrence.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+    const isToday = r.daysUntil === 0;
+    const isTomorrow = r.daysUntil === 1;
+    let countdown;
+    if (isToday) countdown = '<span style="color:var(--primary);font-weight:700">TODAY!</span>';
+    else if (isTomorrow) countdown = '<strong>Tomorrow!</strong>';
+    else countdown = `<strong>${r.daysUntil} days away</strong>`;
+
+    const yearsSince = r.nextOccurrence.getFullYear() - r.originalYear;
+    const yearLabel = yearsSince > 0 && typeLower !== 'death' && typeLower !== 'passing' && typeLower !== 'memorial'
+      ? `<span style="opacity:0.7;font-size:0.85em"> (turning ${yearsSince})</span>` : '';
+
+    return `<div style="margin:6px 0;padding:8px 12px;background:var(--bg-tertiary);border-radius:8px;">
+      <div>${icon} <strong>${escapeHtml(r.title)}</strong>${yearLabel}</div>
+      <div style="margin-top:4px;">\u{1F4C5} ${dateStr}</div>
+      <div style="margin-top:2px;">\u{23F3} ${countdown}</div>
+    </div>`;
+  }).join('');
+
+  addChatBotHtml(`<div class="query-response">${cards}</div>`);
+  return true;
+}
+
 function tryHandleQuery(text) {
   const lower = text.toLowerCase().trim();
+
+  // "When is X's birthday/anniversary/passing?" — lookup marquee events
+  const whenMatch = lower.match(/when\s+is\s+(.+?)(?:'s|s)?\s+(birthday|anniversary|passing|death|memorial)\b/i);
+  if (whenMatch) {
+    return handleWhenIsQuery(whenMatch[1].trim(), whenMatch[2].trim());
+  }
 
   // Detect query patterns — broad coverage of natural phrasing
   const queryPatterns = [
