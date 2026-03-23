@@ -974,6 +974,8 @@ function parseChat(text) {
     result.recurrence = 'monthly';
   else if (lower.includes('every year') || lower.match(/\byearly\b/) || lower.match(/\bannually\b/))
     result.recurrence = 'yearly';
+  else if (lower.includes('birthday'))
+    result.recurrence = 'yearly';
 
   // Detect category
   if (lower.includes('meeting') || lower.includes('meet with') || lower.includes('call with'))
