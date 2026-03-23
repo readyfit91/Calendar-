@@ -732,27 +732,6 @@ function parseChat(text) {
   else if (lower.includes('every year') || lower.match(/\byearly\b/) || lower.match(/\bannually\b/))
     result.recurrence = 'yearly';
 
-  // Detect recurrence end: "for X weeks/days/months" or "until [date]"
-  const forWeeksMatch = lower.match(/\bfor\s+(\d+)\s+weeks?\b/);
-  const forDaysMatch = lower.match(/\bfor\s+(\d+)\s+days?\b/);
-  const forMonthsMatch = lower.match(/\bfor\s+(\d+)\s+months?\b/);
-  if (forWeeksMatch && result.recurrence !== 'none') {
-    const weeks = parseInt(forWeeksMatch[1]);
-    const end = new Date();
-    end.setDate(end.getDate() + weeks * 7);
-    result.recurrenceEnd = formatDate(end);
-  } else if (forDaysMatch && result.recurrence !== 'none') {
-    const days = parseInt(forDaysMatch[1]);
-    const end = new Date();
-    end.setDate(end.getDate() + days);
-    result.recurrenceEnd = formatDate(end);
-  } else if (forMonthsMatch && result.recurrence !== 'none') {
-    const months = parseInt(forMonthsMatch[1]);
-    const end = new Date();
-    end.setMonth(end.getMonth() + months);
-    result.recurrenceEnd = formatDate(end);
-  }
-
   // Detect category
   if (lower.includes('meeting') || lower.includes('meet with') || lower.includes('call with'))
     result.category = 'meeting';
@@ -842,6 +821,27 @@ function parseChat(text) {
 
   if (!result.date) {
     result.date = todayStr;
+  }
+
+  // Detect recurrence end: "for X weeks/days/months" — calculated from the event's start date
+  if (result.recurrence !== 'none') {
+    const forWeeksMatch = lower.match(/\bfor\s+(\d+)\s+weeks?\b/);
+    const forDaysMatch = lower.match(/\bfor\s+(\d+)\s+days?\b/);
+    const forMonthsMatch = lower.match(/\bfor\s+(\d+)\s+months?\b/);
+    const startDate = new Date(result.date + 'T00:00:00');
+    if (forWeeksMatch) {
+      const end = new Date(startDate);
+      end.setDate(end.getDate() + parseInt(forWeeksMatch[1]) * 7);
+      result.recurrenceEnd = formatDate(end);
+    } else if (forDaysMatch) {
+      const end = new Date(startDate);
+      end.setDate(end.getDate() + parseInt(forDaysMatch[1]) - 1);
+      result.recurrenceEnd = formatDate(end);
+    } else if (forMonthsMatch) {
+      const end = new Date(startDate);
+      end.setMonth(end.getMonth() + parseInt(forMonthsMatch[1]));
+      result.recurrenceEnd = formatDate(end);
+    }
   }
 
   // Clean title
