@@ -1093,26 +1093,39 @@ function parseChat(text) {
 
   // Parse time — supports ranges (4-5pm, 4:00-5:00pm, 4pm-5am) and singles (3:00, 300pm, 3am)
   result.endTime = null;
+  // IMPORTANT: Strip date-like patterns first so they don't get mistaken for times
+  // Remove date ranges (04/01-05/01), single dates (04/01), and "until <date>" before time parsing
+  let timeText = text;
+  timeText = timeText.replace(/\b\d{1,2}\/\d{1,2}(\/\d{2,4})?\s*[-–—to]+\s*\d{1,2}\/\d{1,2}(\/\d{2,4})?\b/g, ' ');
+  timeText = timeText.replace(/\buntil\s+\d{1,2}\/\d{1,2}(\/\d{2,4})?\b/gi, ' ');
+  timeText = timeText.replace(/\buntil\s+\S+/gi, ' ');
+  timeText = timeText.replace(/\b\d{1,2}\/\d{1,2}(\/\d{2,4})?\b/g, ' ');
 
-  // Time range patterns: "4-5pm", "4pm-5pm", "4:00-5:00", "400-500pm", "4:00pm-5:30am", etc.
-  const rangeMatch = text.match(/\b(?:at\s+)?(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)\s*[-–—to]+\s*(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)\b(?!\s*\/)/i);
+  // Time range patterns: "4-5pm", "4pm-5pm", "4:00-5:00", "400-500pm", "4:00pm-5:30am"
+  // Requires at least one side to have am/pm OR use colon format to avoid matching random number ranges
+  const rangeMatch = timeText.match(/\b(?:at\s+)?(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)\s*[-–—]+\s*(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)\b/i);
   if (rangeMatch) {
     let startStr = rangeMatch[1].trim();
     let endStr = rangeMatch[2].trim();
-
-    // If only the end has am/pm, apply it to start too: "4-5pm" → "4pm", "5pm"
     const startHasAmPm = /am|pm/i.test(startStr);
     const endHasAmPm = /am|pm/i.test(endStr);
-    if (!startHasAmPm && endHasAmPm) {
-      const suffix = endStr.match(/am|pm/i)[0];
-      startStr = startStr + suffix;
-    }
+    const startHasColon = /:/.test(startStr);
+    const endHasColon = /:/.test(endStr);
 
-    const startTime = parseTimeToken(startStr);
-    const endTime = parseTimeToken(endStr);
-    if (startTime) {
-      result.time = startTime;
-      if (endTime) result.endTime = endTime;
+    // Only treat as time range if at least one side has am/pm or colon
+    if (startHasAmPm || endHasAmPm || startHasColon || endHasColon) {
+      // If only the end has am/pm, apply it to start too: "4-5pm" → "4pm", "5pm"
+      if (!startHasAmPm && endHasAmPm) {
+        const suffix = endStr.match(/am|pm/i)[0];
+        startStr = startStr + suffix;
+      }
+
+      const startTime = parseTimeToken(startStr);
+      const endTime = parseTimeToken(endStr);
+      if (startTime) {
+        result.time = startTime;
+        if (endTime) result.endTime = endTime;
+      }
     }
   }
 
@@ -1129,7 +1142,7 @@ function parseChat(text) {
     ];
 
     for (const pattern of singlePatterns) {
-      const match = text.match(pattern);
+      const match = timeText.match(pattern);
       if (match) {
         const parsed = parseTimeToken(match[1]);
         if (parsed) {
@@ -1355,6 +1368,10 @@ function tryHandleQuery(text) {
     /look (up|at) (my |our |the )?(schedule|calendar|plans?|events?|day)/i,
     // simple date-only queries that start with question words
     /^(what|anything|is there|do we|do i|are we|how).{0,50}(today|tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday|\d{1,2}\/\d{1,2})/i,
+    // "anything in April", "what's in March", "what in June", etc.
+    /\b(anything|what|what's|how|show|check)\b.{0,30}\b(in|for|during)\s+(january|february|march|april|may|june|july|august|september|october|november|december)\b/i,
+    // bare "in April?" / "for March?" at end of sentence
+    /\b(in|for)\s+(january|february|march|april|may|june|july|august|september|october|november|december)\s*\??$/i,
   ];
 
   const isQuery = queryPatterns.some(p => p.test(lower));
