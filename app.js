@@ -315,22 +315,54 @@ async function saveStreaks() {
   }
 }
 
-// Convert event object to DB row format
+// Track which optional columns exist in the DB (discovered at runtime)
+let _dbColumns = null;
+
+async function discoverColumns() {
+  if (_dbColumns) return _dbColumns;
+  try {
+    // Fetch one row (or empty set) to see which columns come back
+    const { data, error } = await db.from('calendar_events').select('*').limit(1);
+    if (!error && data) {
+      if (data.length > 0) {
+        _dbColumns = new Set(Object.keys(data[0]));
+      } else {
+        // No rows yet — try inserting/reading schema via a dummy select of known columns
+        _dbColumns = new Set(['id', 'user_id', 'title', 'date', 'time', 'category', 'priority', 'recurrence', 'completed']);
+        // Probe optional columns one by one
+        for (const col of ['end_time', 'recurrence_end', 'completed_dates']) {
+          const { error: colErr } = await db.from('calendar_events').select(col).limit(0);
+          if (!colErr) _dbColumns.add(col);
+        }
+      }
+    } else {
+      _dbColumns = new Set(['id', 'user_id', 'title', 'date', 'time', 'category', 'priority', 'recurrence', 'completed']);
+    }
+  } catch {
+    _dbColumns = new Set(['id', 'user_id', 'title', 'date', 'time', 'category', 'priority', 'recurrence', 'completed']);
+  }
+  console.log('DB columns discovered:', [..._dbColumns]);
+  return _dbColumns;
+}
+
+// Convert event object to DB row format (only includes columns that exist)
 function eventToRow(event) {
-  return {
+  const row = {
     id: event.id,
     user_id: state.user.id,
     title: event.title,
     date: event.date,
     time: event.time || null,
-    end_time: event.endTime || null,
     category: event.category || 'objective',
     priority: event.priority || 'medium',
     recurrence: event.recurrence || 'none',
-    recurrence_end: event.recurrenceEnd || null,
     completed: event.completed || false,
-    completed_dates: event.completedDates || [],
   };
+  // Only include optional columns if they exist in the DB
+  if (_dbColumns && _dbColumns.has('end_time')) row.end_time = event.endTime || null;
+  if (_dbColumns && _dbColumns.has('recurrence_end')) row.recurrence_end = event.recurrenceEnd || null;
+  if (_dbColumns && _dbColumns.has('completed_dates')) row.completed_dates = event.completedDates || [];
+  return row;
 }
 
 // Convert DB row to event object
@@ -344,7 +376,7 @@ function rowToEvent(row) {
     category: row.category,
     priority: row.priority,
     recurrence: row.recurrence,
-    recurrenceEnd: row.recurrence_end,
+    recurrenceEnd: row.recurrence_end || null,
     completed: row.completed,
     completedDates: row.completed_dates || [],
   };
@@ -357,15 +389,14 @@ async function syncEventToSupabase(event) {
     const row = eventToRow(event);
     const { error, status } = await db.from('calendar_events').upsert(row, { onConflict: 'id' });
     if (error) {
-      const msg = `${error.message} | ${error.details || ''} | ${error.hint || ''} | code:${error.code} | http:${status}`;
-      alert('SYNC ERROR: ' + msg);
-      showSyncStatus(msg);
+      console.error('syncEvent error:', error);
+      showSyncStatus(`Sync error: ${error.message}`);
     } else {
       showSyncStatus('saved');
     }
   } catch (err) {
-    alert('SYNC EXCEPTION: ' + err.message);
-    showSyncStatus(err.message);
+    console.error('syncEvent exception:', err);
+    showSyncStatus(`Sync error: ${err.message}`);
   }
 }
 
@@ -375,15 +406,14 @@ async function deleteEventFromSupabase(id) {
   try {
     const { error, status } = await db.from('calendar_events').delete().eq('id', id).eq('user_id', state.user.id);
     if (error) {
-      const msg = `Delete: ${error.message} | code:${error.code} | http:${status}`;
-      alert('DELETE ERROR: ' + msg);
-      showSyncStatus(msg);
+      console.error('deleteEvent error:', error);
+      showSyncStatus(`Sync error: ${error.message}`);
     } else {
       showSyncStatus('saved');
     }
   } catch (err) {
-    alert('DELETE EXCEPTION: ' + err.message);
-    showSyncStatus(err.message);
+    console.error('deleteEvent exception:', err);
+    showSyncStatus(`Sync error: ${err.message}`);
   }
 }
 
@@ -2203,6 +2233,7 @@ async function initApp(user) {
 
   // Try loading from Supabase first, fall back to localStorage
   try {
+    await discoverColumns();
     await migrateLocalToSupabase();
     await loadFromSupabase();
   } catch (e) {
