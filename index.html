@@ -2,16 +2,70 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Live Calendar - Daily Objectives & Planner</title>
+  <link rel="icon" type="image/jpeg" href="Pop-Wedding-Photography_85__DSC4180.jpg">
+  <link rel="apple-touch-icon" href="Pop-Wedding-Photography_85__DSC4180.jpg">
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#0f1117">
   <link rel="stylesheet" href="styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
-  <div class="app">
+  <!-- Auth Screen -->
+  <div class="auth-screen" id="authScreen">
+    <div class="auth-card">
+      <h1 class="auth-title">My Calendar</h1>
+      <p class="auth-subtitle">Pick a username and password to sync across devices</p>
+      <form id="authForm">
+        <label>Username
+          <input type="text" id="authEmail" required placeholder="Enter a username" minlength="2" autocapitalize="none" autocorrect="off">
+        </label>
+        <label>Password
+          <input type="password" id="authPassword" required placeholder="Min 6 characters" minlength="6">
+        </label>
+        <div class="auth-actions">
+          <button type="submit" class="btn-primary" id="authSignIn">Sign In</button>
+          <button type="button" class="btn-secondary" id="authSignUp">Sign Up</button>
+        </div>
+      </form>
+      <div class="auth-error hidden" id="authError"></div>
+      <div class="auth-info hidden" id="authInfo"></div>
+    </div>
+  </div>
+
+  <div class="app hidden" id="appMain">
     <!-- Header -->
     <header class="header">
       <h1>My Calendar</h1>
-      <div class="current-date" id="currentDate"></div>
+      <div class="header-right">
+        <!-- Progress Bar -->
+        <div class="progress-container" id="progressBar">
+          <div class="progress-track">
+            <div class="progress-fill" id="progressFill"></div>
+          </div>
+          <span class="progress-text" id="progressText">No tasks today</span>
+        </div>
+        <!-- Streak Display -->
+        <div class="streak-display">
+          <div class="streak-flame" title="Current streak">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2c1 4-2 6-2 10a4 4 0 0 0 8 0c0-4-3-6-2-10"/><path d="M12 12a2 2 0 0 0-2 2c0 1.1.9 2 2 2s2-.9 2-2a2 2 0 0 0-2-2z"/></svg>
+            <span id="streakCurrent">0</span>
+          </div>
+          <div class="streak-best" title="Best streak">
+            Best: <span id="streakBest">0</span>
+          </div>
+        </div>
+        <!-- Focus Mode Button -->
+        <button class="focus-btn" id="focusToggle" title="Focus Mode">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
+          Focus
+        </button>
+        <div class="current-date" id="currentDate"></div>
+        <button class="signout-btn" id="signOutBtn" title="Sign Out">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        </button>
+      </div>
     </header>
 
     <div class="main-layout">
@@ -59,13 +113,21 @@
         </div>
       </main>
 
-      <!-- Right Sidebar: Monthly Horizon -->
+      <!-- Right Sidebar: Monthly Horizon + Birthdays -->
       <aside class="sidebar horizon-panel">
         <h2>On the Horizon</h2>
         <div class="horizon-label" id="horizonLabel"></div>
         <ul class="horizon-list" id="horizonList">
           <li class="empty-state">Nothing upcoming this month yet.</li>
         </ul>
+
+        <!-- Birthday Countdown -->
+        <div class="birthday-section" id="birthdaySection">
+          <h2 class="birthday-heading">Upcoming Birthdays</h2>
+          <div class="birthday-list" id="birthdayList">
+            <div class="empty-state">No birthdays tracked yet. Add events with "birthday" in the title!</div>
+          </div>
+        </div>
       </aside>
     </div>
 
@@ -73,14 +135,17 @@
     <div class="chatbox">
       <div class="chat-messages" id="chatMessages">
         <div class="chat-message bot">
-          <span>Hi! Tell me what to add to your calendar. Try things like:<br>
+          <span>Hi! Tell me what to add, or ask what you have planned:<br>
           <em>"Meeting with team on March 25 at 2pm"</em><br>
-          <em>"Finish report by Friday"</em><br>
-          <em>"Gym every Monday and Wednesday"</em></span>
+          <em>"Urgent: submit proposal today at 5pm"</em><br>
+          <em>"Stand-up meeting every day at 9am"</em><br>
+          <em>"What do I have planned for tomorrow?"</em><br>
+          <em>"What's on my schedule for Friday?"</em><br>
+          <em>"Show me my events for March 28"</em></span>
         </div>
       </div>
       <div class="chat-input-area">
-        <input type="text" id="chatInput" placeholder="Type an event or objective..." autocomplete="off">
+        <input type="text" id="chatInput" placeholder="Type an event or objective... (supports priority: 'urgent', 'low priority')" autocomplete="off">
         <button id="chatSend">Send</button>
       </div>
     </div>
@@ -109,11 +174,64 @@
             <option value="personal">Personal</option>
           </select>
         </label>
+        <label>Priority
+          <select id="eventPriority">
+            <option value="high">High</option>
+            <option value="medium" selected>Medium</option>
+            <option value="low">Low</option>
+          </select>
+        </label>
+        <label>Repeat
+          <select id="eventRecurrence">
+            <option value="none">None</option>
+            <option value="daily">Daily</option>
+            <option value="weekly">Weekly</option>
+            <option value="monthly">Monthly</option>
+            <option value="yearly">Yearly</option>
+          </select>
+        </label>
+        <div class="recurrence-end-row hidden" id="recurrenceEndRow">
+          <label>Repeat until (optional)
+            <input type="date" id="eventRecurrenceEnd">
+          </label>
+        </div>
         <div class="modal-actions">
           <button type="button" id="modalCancel">Cancel</button>
           <button type="submit">Save</button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- Conflict Dialog -->
+  <div class="modal-overlay hidden" id="conflictOverlay">
+    <div class="modal conflict-modal">
+      <h3>Scheduling Conflict</h3>
+      <p class="conflict-message" id="conflictMessage"></p>
+      <div class="conflict-existing" id="conflictExisting"></div>
+      <div class="conflict-actions">
+        <button type="button" id="conflictCancel">Cancel</button>
+        <button type="button" id="conflictReplace" class="btn-danger">Replace Existing</button>
+        <button type="button" id="conflictKeepBoth" class="btn-primary">Keep Both</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Focus Mode Overlay -->
+  <div class="focus-overlay hidden" id="focusOverlay">
+    <div class="focus-panel">
+      <div class="focus-header">
+        <h2>Focus Mode</h2>
+        <div class="focus-subtitle">Today's Tasks</div>
+        <button class="focus-close-btn" id="focusClose">&times;</button>
+      </div>
+      <div class="focus-progress" id="focusProgress">
+        <div class="progress-track large">
+          <div class="progress-fill" id="focusProgressFill"></div>
+        </div>
+        <span class="progress-text" id="focusProgressText">Loading...</span>
+      </div>
+      <div class="focus-list" id="focusList"></div>
     </div>
   </div>
 
