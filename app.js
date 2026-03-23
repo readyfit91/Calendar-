@@ -1041,10 +1041,10 @@ function parseChat(text) {
     }
   }
 
-  // Explicit dates
+  // Explicit dates — exclude dates preceded by "until" (those are recurrence end dates)
   const monthNames = ['january', 'february', 'march', 'april', 'may', 'june',
     'july', 'august', 'september', 'october', 'november', 'december'];
-  const monthPattern = new RegExp(`\\b(${monthNames.join('|')})\\s+(\\d{1,2})(?:st|nd|rd|th)?(?:\\s*,?\\s*(\\d{4}))?`, 'i');
+  const monthPattern = new RegExp(`(?<!\\buntil\\s)\\b(${monthNames.join('|')})\\s+(\\d{1,2})(?:st|nd|rd|th)?(?:\\s*,?\\s*(\\d{4}))?`, 'i');
   const monthMatch = text.match(monthPattern);
   if (monthMatch) {
     const m = monthNames.indexOf(monthMatch[1].toLowerCase());
@@ -1053,7 +1053,8 @@ function parseChat(text) {
     result.date = `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
   }
 
-  const numDateMatch = text.match(/\b(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b/);
+  // Match numeric dates but NOT ones preceded by "until" (those are recurrence end dates)
+  const numDateMatch = text.match(/(?<!\buntil\s)\b(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b/);
   if (numDateMatch && !result.date) {
     const m = parseInt(numDateMatch[1]);
     const d = parseInt(numDateMatch[2]);
@@ -1066,24 +1067,52 @@ function parseChat(text) {
     result.date = todayStr;
   }
 
-  // Detect recurrence end: "for X weeks/days/months" — calculated from the event's start date
+  // Detect recurrence end
   if (result.recurrence !== 'none') {
-    const forWeeksMatch = lower.match(/\bfor\s+(\d+)\s+weeks?\b/);
-    const forDaysMatch = lower.match(/\bfor\s+(\d+)\s+days?\b/);
-    const forMonthsMatch = lower.match(/\bfor\s+(\d+)\s+months?\b/);
     const startDate = new Date(result.date + 'T00:00:00');
-    if (forWeeksMatch) {
-      const end = new Date(startDate);
-      end.setDate(end.getDate() + parseInt(forWeeksMatch[1]) * 7);
-      result.recurrenceEnd = formatDate(end);
-    } else if (forDaysMatch) {
-      const end = new Date(startDate);
-      end.setDate(end.getDate() + parseInt(forDaysMatch[1]) - 1);
-      result.recurrenceEnd = formatDate(end);
-    } else if (forMonthsMatch) {
-      const end = new Date(startDate);
-      end.setMonth(end.getMonth() + parseInt(forMonthsMatch[1]));
-      result.recurrenceEnd = formatDate(end);
+
+    // "until <date>" — explicit end date
+    const untilNumMatch = text.match(/\buntil\s+(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b/i);
+    const untilMonthMatch = text.match(new RegExp(`\\buntil\\s+(${monthNames.join('|')})\\s+(\\d{1,2})(?:st|nd|rd|th)?(?:\\s*,?\\s*(\\d{4}))?`, 'i'));
+    const untilDayMatch = text.match(/\buntil\s+(sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b/i);
+
+    if (untilNumMatch) {
+      const m = parseInt(untilNumMatch[1]);
+      const d = parseInt(untilNumMatch[2]);
+      let y = untilNumMatch[3] ? parseInt(untilNumMatch[3]) : today.getFullYear();
+      if (y < 100) y += 2000;
+      result.recurrenceEnd = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    } else if (untilMonthMatch) {
+      const m = monthNames.indexOf(untilMonthMatch[1].toLowerCase());
+      const d = parseInt(untilMonthMatch[2]);
+      const y = untilMonthMatch[3] ? parseInt(untilMonthMatch[3]) : today.getFullYear();
+      result.recurrenceEnd = `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    } else if (untilDayMatch) {
+      const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+      const targetDay = dayNames.indexOf(untilDayMatch[1].toLowerCase());
+      const d = new Date(today);
+      let diff = targetDay - d.getDay();
+      if (diff <= 0) diff += 7;
+      d.setDate(d.getDate() + diff);
+      result.recurrenceEnd = formatDate(d);
+    } else {
+      // "for X weeks/days/months" — calculated from the event's start date
+      const forWeeksMatch = lower.match(/\bfor\s+(\d+)\s+weeks?\b/);
+      const forDaysMatch = lower.match(/\bfor\s+(\d+)\s+days?\b/);
+      const forMonthsMatch = lower.match(/\bfor\s+(\d+)\s+months?\b/);
+      if (forWeeksMatch) {
+        const end = new Date(startDate);
+        end.setDate(end.getDate() + parseInt(forWeeksMatch[1]) * 7);
+        result.recurrenceEnd = formatDate(end);
+      } else if (forDaysMatch) {
+        const end = new Date(startDate);
+        end.setDate(end.getDate() + parseInt(forDaysMatch[1]) - 1);
+        result.recurrenceEnd = formatDate(end);
+      } else if (forMonthsMatch) {
+        const end = new Date(startDate);
+        end.setMonth(end.getMonth() + parseInt(forMonthsMatch[1]));
+        result.recurrenceEnd = formatDate(end);
+      }
     }
   }
 
@@ -1098,6 +1127,9 @@ function parseChat(text) {
   title = title.replace(/\b(urgent|important|critical|high priority|low priority|asap|not urgent|optional|whenever)\b/gi, '');
   title = title.replace(/\b(every\s+day|everyday|daily|every\s+week|weekly|every\s+month|monthly|every\s+year|yearly|annually)\b/gi, '');
   title = title.replace(/\bfor\s+\d+\s+(weeks?|days?|months?)\b/gi, '');
+  title = title.replace(/\buntil\s+\d{1,2}\/\d{1,2}(\/\d{2,4})?\b/gi, '');
+  title = title.replace(new RegExp(`\\buntil\\s+(${monthNames.join('|')})\\s+\\d{1,2}(st|nd|rd|th)?`, 'gi'), '');
+  title = title.replace(/\buntil\s+(sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b/gi, '');
   title = title.replace(/\s{2,}/g, ' ').trim();
 
   if (title) {
