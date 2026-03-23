@@ -1109,6 +1109,27 @@ body {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.query-date-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.query-date-divider {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--primary);
+  padding: 6px 4px 2px;
+  border-bottom: 1px solid var(--border);
+  margin-top: 4px;
+}
+
+.query-date-group:first-child .query-date-divider {
+  margin-top: 0;
 }
 
 .query-event-card {

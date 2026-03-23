@@ -1200,6 +1200,18 @@ function tryHandleQuery(text) {
   const isQuery = queryPatterns.some(p => p.test(lower));
   if (!isQuery) return false;
 
+  // Check for month-only query: "in April", "for March", "anything in June"
+  const monthNames = ['january', 'february', 'march', 'april', 'may', 'june',
+    'july', 'august', 'september', 'october', 'november', 'december'];
+  const monthOnlyMatch = lower.match(new RegExp(`\\b(in|for|during)\\s+(${monthNames.join('|')})\\b`, 'i'));
+  // Also match just a bare month name if no day number follows it
+  const bareMonthMatch = !monthOnlyMatch ? lower.match(new RegExp(`\\b(${monthNames.join('|')})\\b(?!\\s+\\d)`, 'i')) : null;
+  const monthQueryMatch = monthOnlyMatch ? monthOnlyMatch[2] : (bareMonthMatch ? bareMonthMatch[1] : null);
+
+  if (monthQueryMatch) {
+    return handleMonthQuery(monthQueryMatch.toLowerCase(), monthNames);
+  }
+
   // Parse the date from the query
   const date = parseDateFromText(text);
   if (!date) {
@@ -1234,36 +1246,119 @@ function tryHandleQuery(text) {
     return true;
   }
 
-  const completed = events.filter(e => e.completed).length;
-  const percent = Math.round((completed / events.length) * 100);
-  const summary = events.length === 1 ? '1 item' : `${events.length} items`;
+  renderQueryResults(events, dateDisplay, { isToday, isTomorrow, dayLabel });
 
-  const categoryIcons = {
+  // Navigate calendar to the queried date
+  state.currentDate = new Date(date);
+  render();
+  return true;
+}
+
+function handleMonthQuery(monthName, monthNames) {
+  const today = new Date();
+  const monthIndex = monthNames.indexOf(monthName);
+  const year = today.getFullYear();
+  const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
+  const monthLabel = monthName.charAt(0).toUpperCase() + monthName.slice(1) + ' ' + year;
+
+  // Collect all events across every day of the month
+  const allEvents = [];
+  for (let day = 1; day <= daysInMonth; day++) {
+    const dateStr = `${year}-${String(monthIndex + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    const dayEvents = getEventsForDate(dateStr);
+    dayEvents.forEach(e => {
+      // Avoid duplicates for recurring events (same id)
+      if (!allEvents.find(x => x.id === e.id && x.date === dateStr)) {
+        allEvents.push({ ...e, _displayDate: dateStr });
+      }
+    });
+  }
+
+  allEvents.sort((a, b) => a._displayDate.localeCompare(b._displayDate) || (a.time || '').localeCompare(b.time || ''));
+
+  if (allEvents.length === 0) {
+    addChatBotHtml(`<div class="query-response">
+      <div class="query-header empty">
+        <span class="query-date-label">${monthLabel}</span>
+        <span class="query-summary">Nothing planned</span>
+      </div>
+      <div class="query-empty-msg">Your schedule is clear for ${monthLabel}!</div>
+    </div>`);
+    state.currentDate = new Date(year, monthIndex, 1);
+    render();
+    return true;
+  }
+
+  // Group events by date
+  const grouped = {};
+  allEvents.forEach(e => {
+    if (!grouped[e._displayDate]) grouped[e._displayDate] = [];
+    grouped[e._displayDate].push(e);
+  });
+
+  const categoryIcons = getQueryCategoryIcons();
+
+  let cardsHtml = '';
+  for (const [dateStr, events] of Object.entries(grouped)) {
+    const dateObj = new Date(dateStr + 'T00:00:00');
+    const dateLabel = formatDisplay(dateObj);
+    cardsHtml += `<div class="query-date-group"><div class="query-date-divider">${dateLabel}</div>`;
+    events.forEach(e => {
+      cardsHtml += renderQueryEventCard(e, categoryIcons);
+    });
+    cardsHtml += '</div>';
+  }
+
+  const summary = allEvents.length === 1 ? '1 item' : `${allEvents.length} items`;
+  const completed = allEvents.filter(e => e.completed).length;
+
+  addChatBotHtml(`<div class="query-response">
+    <div class="query-header">
+      <span class="query-date-label">${monthLabel}</span>
+      <span class="query-summary">${summary}${completed > 0 ? ` &middot; ${completed} done` : ''}</span>
+    </div>
+    <div class="query-event-list">${cardsHtml}</div>
+  </div>`);
+
+  state.currentDate = new Date(year, monthIndex, 1);
+  render();
+  return true;
+}
+
+function getQueryCategoryIcons() {
+  return {
     objective: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>',
     meeting: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
     deadline: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>',
     reminder: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>',
     personal: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>',
   };
+}
 
-  const eventCards = events.map(e => {
-    const icon = categoryIcons[e.category] || categoryIcons.objective;
-    const timeStr = e.time ? formatTime(e.time) : '';
-    const priClass = e.priority === 'high' ? 'pri-high' : e.priority === 'low' ? 'pri-low' : '';
-    const doneClass = e.completed ? ' done' : '';
-    const recurBadge = e.recurrence && e.recurrence !== 'none'
-      ? `<span class="query-recur">&#x21BB; ${e.recurrence}</span>` : '';
+function renderQueryEventCard(e, categoryIcons) {
+  const icon = categoryIcons[e.category] || categoryIcons.objective;
+  const timeStr = e.time ? formatTime(e.time) : '';
+  const priClass = e.priority === 'high' ? 'pri-high' : e.priority === 'low' ? 'pri-low' : '';
+  const doneClass = e.completed ? ' done' : '';
+  const recurBadge = e.recurrence && e.recurrence !== 'none'
+    ? `<span class="query-recur">&#x21BB; ${e.recurrence}</span>` : '';
 
-    return `<div class="query-event-card cat-${e.category}${doneClass} ${priClass}">
-      <div class="query-event-icon">${icon}</div>
-      <div class="query-event-details">
-        <span class="query-event-title">${escapeHtml(e.title)}</span>
-        <span class="query-event-meta">${timeStr ? timeStr + ' ' : ''}<span class="query-cat-label">${e.category}</span>${recurBadge}</span>
-      </div>
-      ${e.completed ? '<span class="query-done-badge">Done</span>' : ''}
-    </div>`;
-  }).join('');
+  return `<div class="query-event-card cat-${e.category}${doneClass} ${priClass}">
+    <div class="query-event-icon">${icon}</div>
+    <div class="query-event-details">
+      <span class="query-event-title">${escapeHtml(e.title)}</span>
+      <span class="query-event-meta">${timeStr ? timeStr + ' ' : ''}<span class="query-cat-label">${e.category}</span>${recurBadge}</span>
+    </div>
+    ${e.completed ? '<span class="query-done-badge">Done</span>' : ''}
+  </div>`;
+}
 
+function renderQueryResults(events, dateDisplay, labels) {
+  const completed = events.filter(e => e.completed).length;
+  const percent = Math.round((completed / events.length) * 100);
+  const summary = events.length === 1 ? '1 item' : `${events.length} items`;
+  const categoryIcons = getQueryCategoryIcons();
+  const eventCards = events.map(e => renderQueryEventCard(e, categoryIcons)).join('');
   const progressBar = `<div class="query-progress-track"><div class="query-progress-fill${percent === 100 ? ' complete' : ''}" style="width:${percent}%"></div></div>`;
 
   addChatBotHtml(`<div class="query-response">
@@ -1274,11 +1369,6 @@ function tryHandleQuery(text) {
     ${progressBar}
     <div class="query-event-list">${eventCards}</div>
   </div>`);
-
-  // Navigate calendar to the queried date
-  state.currentDate = new Date(date);
-  render();
-  return true;
 }
 
 function parseDateFromText(text) {
