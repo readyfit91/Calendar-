@@ -244,9 +244,25 @@ async function _syncToSupabase() {
   if (!state.user) return;
   try {
     const rows = state.events.map(e => eventToRow(e));
+
+    // Upsert current events
     if (rows.length > 0) {
       const { error } = await db.from('calendar_events').upsert(rows);
       if (error) console.error('Supabase sync error:', error.message);
+    }
+
+    // Delete events from Supabase that no longer exist locally
+    const { data: remoteEvents } = await db
+      .from('calendar_events')
+      .select('id')
+      .eq('user_id', state.user.id);
+
+    if (remoteEvents) {
+      const localIds = new Set(state.events.map(e => e.id));
+      const toDelete = remoteEvents.filter(r => !localIds.has(r.id)).map(r => r.id);
+      if (toDelete.length > 0) {
+        await db.from('calendar_events').delete().in('id', toDelete);
+      }
     }
   } catch (err) {
     console.error('Supabase sync failed (offline?):', err.message);
@@ -2141,6 +2157,16 @@ async function initApp(user) {
     _syncToSupabase();
     saveStreaks();
   }, 30000);
+
+  // Re-fetch from Supabase when tab regains focus (covers phone switching back)
+  document.addEventListener('visibilitychange', async () => {
+    if (document.visibilityState === 'visible' && state.user) {
+      try {
+        await loadFromSupabase();
+        render();
+      } catch (e) { /* offline, use cached */ }
+    }
+  });
 
   showApp();
   render();
