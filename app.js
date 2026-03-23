@@ -72,6 +72,23 @@ const els = {
   focusClose: $('#focusClose'),
 };
 
+// ===== Marquee Keywords =====
+const MARQUEE_KEYWORDS = [
+  { keyword: 'birthday', icon: '\u{1F382}', iconUpcoming: '\u{1F381}' },
+  { keyword: 'anniversary', icon: '\u{1F492}', iconUpcoming: '\u{1F48D}' },
+  { keyword: 'wedding', icon: '\u{1F492}', iconUpcoming: '\u{1F492}' },
+  { keyword: 'graduation', icon: '\u{1F393}', iconUpcoming: '\u{1F393}' },
+  { keyword: 'holiday', icon: '\u{1F389}', iconUpcoming: '\u{1F389}' },
+  { keyword: 'vacation', icon: '\u{2708}\u{FE0F}', iconUpcoming: '\u{2708}\u{FE0F}' },
+  { keyword: 'trip', icon: '\u{2708}\u{FE0F}', iconUpcoming: '\u{2708}\u{FE0F}' },
+  { keyword: 'concert', icon: '\u{1F3B5}', iconUpcoming: '\u{1F3B5}' },
+  { keyword: 'party', icon: '\u{1F389}', iconUpcoming: '\u{1F389}' },
+  { keyword: 'event', icon: '\u{2B50}', iconUpcoming: '\u{2B50}' },
+  { keyword: 'passing', icon: '\u{1F54A}\u{FE0F}', iconUpcoming: '\u{1F56F}\u{FE0F}' },
+  { keyword: 'memorial', icon: '\u{1F56F}\u{FE0F}', iconUpcoming: '\u{1F56F}\u{FE0F}' },
+  { keyword: 'remembrance', icon: '\u{1F56F}\u{FE0F}', iconUpcoming: '\u{1F56F}\u{FE0F}' },
+];
+
 // ===== Helpers =====
 function formatDate(d) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -514,23 +531,9 @@ function renderHorizon(today) {
 }
 
 function renderBirthdayCountdown(today) {
-  // Keywords that get promoted to the marquee with their icons
-  const marqueeKeywords = [
-    { keyword: 'birthday', icon: '\u{1F382}', iconUpcoming: '\u{1F381}' },
-    { keyword: 'anniversary', icon: '\u{1F492}', iconUpcoming: '\u{1F48D}' },
-    { keyword: 'wedding', icon: '\u{1F492}', iconUpcoming: '\u{1F492}' },
-    { keyword: 'graduation', icon: '\u{1F393}', iconUpcoming: '\u{1F393}' },
-    { keyword: 'holiday', icon: '\u{1F389}', iconUpcoming: '\u{1F389}' },
-    { keyword: 'vacation', icon: '\u{2708}\u{FE0F}', iconUpcoming: '\u{2708}\u{FE0F}' },
-    { keyword: 'trip', icon: '\u{2708}\u{FE0F}', iconUpcoming: '\u{2708}\u{FE0F}' },
-    { keyword: 'concert', icon: '\u{1F3B5}', iconUpcoming: '\u{1F3B5}' },
-    { keyword: 'party', icon: '\u{1F389}', iconUpcoming: '\u{1F389}' },
-    { keyword: 'event', icon: '\u{2B50}', iconUpcoming: '\u{2B50}' },
-  ];
-
   const marqueeEvents = state.events.filter(e => {
     const lower = e.title.toLowerCase();
-    return marqueeKeywords.some(k => lower.includes(k.keyword));
+    return MARQUEE_KEYWORDS.some(k => lower.includes(k.keyword));
   });
 
   if (marqueeEvents.length === 0) {
@@ -543,7 +546,7 @@ function renderBirthdayCountdown(today) {
   // Calculate next occurrence and days until
   const upcoming = marqueeEvents.map(e => {
     const lower = e.title.toLowerCase();
-    const matched = marqueeKeywords.find(k => lower.includes(k.keyword));
+    const matched = MARQUEE_KEYWORDS.find(k => lower.includes(k.keyword));
     const eventDate = new Date(e.date + 'T00:00:00');
     const isYearly = e.recurrence === 'yearly';
 
@@ -886,6 +889,7 @@ function renderFocusMode() {
 // ===== Conflict Detection =====
 let pendingConflictEvent = null;
 let conflictingEvents = [];
+let pendingYearlyEvent = null;
 
 function findExistingEvents(date) {
   return getEventsForDate(date);
@@ -1638,6 +1642,21 @@ function handleChat(text) {
     completedDates: [],
   };
 
+  // Check if a marquee keyword is used and recurrence isn't already yearly — prompt user
+  const lower = text.toLowerCase();
+  const hasMarqueeKeyword = MARQUEE_KEYWORDS.some(k => lower.includes(k.keyword));
+  if (hasMarqueeKeyword && event.recurrence !== 'yearly' && event.recurrence !== 'daily') {
+    pendingYearlyEvent = event;
+    addChatBotHtml(`<div class="yearly-prompt">
+      <p>Should <strong>"${escapeHtml(event.title)}"</strong> repeat every year?</p>
+      <div class="yearly-prompt-actions">
+        <button class="btn-primary yearly-yes">Yes, yearly</button>
+        <button class="yearly-no">No, just once</button>
+      </div>
+    </div>`);
+    return;
+  }
+
   addEventWithConflictCheck(event, 'chat');
 }
 
@@ -1695,6 +1714,26 @@ els.weekTab.addEventListener('click', () => {
 els.chatSend.addEventListener('click', () => handleChat(els.chatInput.value));
 els.chatInput.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') handleChat(els.chatInput.value);
+});
+
+// Yearly recurrence prompt — delegated click handlers
+els.chatMessages.addEventListener('click', (e) => {
+  if (e.target.classList.contains('yearly-yes') && pendingYearlyEvent) {
+    const event = pendingYearlyEvent;
+    pendingYearlyEvent = null;
+    event.recurrence = 'yearly';
+    // Remove the prompt buttons
+    const prompt = e.target.closest('.yearly-prompt');
+    if (prompt) prompt.innerHTML = `<p>Got it — <strong>"${escapeHtml(event.title)}"</strong> will repeat every year.</p>`;
+    addEventWithConflictCheck(event, 'chat');
+  } else if (e.target.classList.contains('yearly-no') && pendingYearlyEvent) {
+    const event = pendingYearlyEvent;
+    pendingYearlyEvent = null;
+    // Remove the prompt buttons
+    const prompt = e.target.closest('.yearly-prompt');
+    if (prompt) prompt.innerHTML = `<p>Got it — <strong>"${escapeHtml(event.title)}"</strong> added as a one-time event.</p>`;
+    addEventWithConflictCheck(event, 'chat');
+  }
 });
 
 els.eventForm.addEventListener('submit', (e) => {
