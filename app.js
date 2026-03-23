@@ -870,7 +870,7 @@ function findExistingEvents(date) {
 }
 
 function showConflictDialog(newEvent, existing) {
-  pendingConflictEvent = newEvent;
+  // pendingConflictEvent is already set by addEventWithConflictCheck as { event, source }
   conflictingEvents = existing;
 
   const dateDisplay = formatDisplay(new Date(newEvent.date + 'T00:00:00'));
