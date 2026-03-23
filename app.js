@@ -1185,11 +1185,19 @@ function openModal(dateStr) {
   els.recurrenceEndRow.classList.add('hidden');
   els.modalTitle.textContent = 'Add Event';
   els.modalOverlay.classList.remove('hidden');
-  els.eventTitle.focus();
+  els.modalOverlay.scrollTop = 0;
+  // Delay focus slightly on mobile to prevent scroll jump
+  setTimeout(() => {
+    els.eventTitle.focus({ preventScroll: true });
+    window.scrollTo(0, 0);
+  }, 100);
 }
 
 function closeModal() {
+  // Blur active input to dismiss keyboard on mobile
+  if (document.activeElement) document.activeElement.blur();
   els.modalOverlay.classList.add('hidden');
+  window.scrollTo(0, 0);
 }
 
 // ===== Chat Parser =====
@@ -2120,6 +2128,45 @@ document.addEventListener('keydown', (e) => {
     else closeModal();
   }
 });
+
+// ===== Mobile: Prevent page scroll on input focus =====
+(function() {
+  // On iOS/iPad, focusing an input scrolls the page. Lock scroll position instead.
+  let scrollPos = 0;
+  const appEl = document.querySelector('.app');
+
+  document.addEventListener('focusin', (e) => {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') {
+      scrollPos = window.scrollY;
+      // Immediately scroll back if the browser scrolled
+      requestAnimationFrame(() => {
+        window.scrollTo(0, 0);
+      });
+    }
+  });
+
+  // Prevent any scroll on the window (all scroll should be inside .app)
+  window.addEventListener('scroll', () => {
+    if (window.scrollY !== 0) {
+      window.scrollTo(0, 0);
+    }
+  }, { passive: false });
+
+  // Prevent touchmove on body to stop pull-to-scroll on iOS
+  document.body.addEventListener('touchmove', (e) => {
+    // Allow scroll inside scrollable containers
+    let el = e.target;
+    while (el && el !== document.body) {
+      const style = window.getComputedStyle(el);
+      const overflowY = style.overflowY;
+      if ((overflowY === 'auto' || overflowY === 'scroll') && el.scrollHeight > el.clientHeight) {
+        return; // Allow scrolling inside this element
+      }
+      el = el.parentElement;
+    }
+    e.preventDefault();
+  }, { passive: false });
+})();
 
 // ===== Live Clock Update =====
 function updateClock() {
