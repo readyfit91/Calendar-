@@ -273,8 +273,8 @@ async function _syncToSupabase() {
 
     // Upsert current events
     if (rows.length > 0) {
-      const { error } = await db.from('calendar_events').upsert(rows);
-      if (error) console.error('Supabase sync error:', error.message);
+      const { error } = await db.from('calendar_events').upsert(rows, { onConflict: 'id' });
+      if (error) console.error('Supabase sync error:', error.message, error.details, error.hint);
     }
   } catch (err) {
     console.error('Supabase sync failed (offline?):', err.message);
@@ -353,15 +353,18 @@ async function syncEventToSupabase(event) {
   if (!state.user) return;
   showSyncStatus('syncing');
   try {
-    const { error } = await db.from('calendar_events').upsert(eventToRow(event));
+    const row = eventToRow(event);
+    console.log('Syncing event to Supabase:', JSON.stringify(row));
+    const { error, status, statusText } = await db.from('calendar_events').upsert(row, { onConflict: 'id' });
     if (error) {
-      console.error('syncEvent error:', error.message);
+      console.error('syncEvent error:', error.message, error.details, error.hint, error.code, 'status:', status, statusText);
       showSyncStatus('error');
     } else {
+      console.log('syncEvent success, status:', status);
       showSyncStatus('saved');
     }
   } catch (err) {
-    console.error('syncEvent failed:', err.message);
+    console.error('syncEvent exception:', err);
     showSyncStatus('error');
   }
 }
@@ -387,10 +390,13 @@ async function loadFromSupabase() {
   if (!state.user) return;
 
   // Load events
-  const { data: events } = await db
+  const { data: events, error: evErr } = await db
     .from('calendar_events')
     .select('*')
     .eq('user_id', state.user.id);
+
+  if (evErr) console.error('loadFromSupabase error:', evErr.message, evErr.details, evErr.hint, evErr.code);
+  console.log('loadFromSupabase: got', events?.length ?? 0, 'events, user_id:', state.user.id);
 
   if (events) {
     state.events = events.map(rowToEvent);
@@ -439,7 +445,7 @@ async function migrateLocalToSupabase() {
     completedDates: e.completedDates || [],
   }));
 
-  await db.from('calendar_events').upsert(rows);
+  await db.from('calendar_events').upsert(rows, { onConflict: 'id' });
 
   const localStreaks = JSON.parse(localStorage.getItem('calendarStreaks') || '{}');
   if (localStreaks.current || localStreaks.best) {
@@ -453,7 +459,14 @@ async function migrateLocalToSupabase() {
 }
 
 function generateId() {
-  return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+  // Use crypto.randomUUID if available (proper UUID for Supabase), fallback to custom
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+    const r = Math.random() * 16 | 0;
+    return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+  });
 }
 
 function getPriorityIcon(priority) {
