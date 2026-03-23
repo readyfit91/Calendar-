@@ -2135,6 +2135,13 @@ async function initApp(user) {
   // Start real-time sync for cross-device updates
   startRealtimeSync();
 
+  // Auto-save to Supabase every 30 seconds
+  if (window._autoSaveInterval) clearInterval(window._autoSaveInterval);
+  window._autoSaveInterval = setInterval(() => {
+    _syncToSupabase();
+    saveStreaks();
+  }, 30000);
+
   showApp();
   render();
 }
@@ -2182,6 +2189,7 @@ authEls.signUp.addEventListener('click', async () => {
 
 authEls.signOutBtn.addEventListener('click', async () => {
   stopRealtimeSync();
+  if (window._autoSaveInterval) clearInterval(window._autoSaveInterval);
   await db.auth.signOut();
   state.user = null;
   state.events = [];
