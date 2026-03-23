@@ -514,45 +514,74 @@ function renderHorizon(today) {
 }
 
 function renderBirthdayCountdown(today) {
-  const birthdayEvents = state.events.filter(e =>
-    e.title.toLowerCase().includes('birthday')
-  );
+  // Keywords that get promoted to the marquee with their icons
+  const marqueeKeywords = [
+    { keyword: 'birthday', icon: '\u{1F382}', iconUpcoming: '\u{1F381}' },
+    { keyword: 'anniversary', icon: '\u{1F492}', iconUpcoming: '\u{1F48D}' },
+    { keyword: 'wedding', icon: '\u{1F492}', iconUpcoming: '\u{1F492}' },
+    { keyword: 'graduation', icon: '\u{1F393}', iconUpcoming: '\u{1F393}' },
+    { keyword: 'holiday', icon: '\u{1F389}', iconUpcoming: '\u{1F389}' },
+    { keyword: 'vacation', icon: '\u{2708}\u{FE0F}', iconUpcoming: '\u{2708}\u{FE0F}' },
+    { keyword: 'trip', icon: '\u{2708}\u{FE0F}', iconUpcoming: '\u{2708}\u{FE0F}' },
+    { keyword: 'concert', icon: '\u{1F3B5}', iconUpcoming: '\u{1F3B5}' },
+    { keyword: 'party', icon: '\u{1F389}', iconUpcoming: '\u{1F389}' },
+    { keyword: 'event', icon: '\u{2B50}', iconUpcoming: '\u{2B50}' },
+  ];
 
-  if (birthdayEvents.length === 0) {
+  const marqueeEvents = state.events.filter(e => {
+    const lower = e.title.toLowerCase();
+    return marqueeKeywords.some(k => lower.includes(k.keyword));
+  });
+
+  if (marqueeEvents.length === 0) {
     els.birthdayMarquee.classList.add('hidden');
     return;
   }
 
   const todayTime = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
 
-  // Calculate next occurrence and days until — only show upcoming month
-  const birthdays = birthdayEvents.map(e => {
+  // Calculate next occurrence and days until
+  const upcoming = marqueeEvents.map(e => {
+    const lower = e.title.toLowerCase();
+    const matched = marqueeKeywords.find(k => lower.includes(k.keyword));
     const eventDate = new Date(e.date + 'T00:00:00');
-    let nextOccurrence = new Date(today.getFullYear(), eventDate.getMonth(), eventDate.getDate());
-    if (nextOccurrence.getTime() < todayTime) {
-      nextOccurrence = new Date(today.getFullYear() + 1, eventDate.getMonth(), eventDate.getDate());
+    const isYearly = e.recurrence === 'yearly';
+
+    let nextOccurrence;
+    if (isYearly) {
+      nextOccurrence = new Date(today.getFullYear(), eventDate.getMonth(), eventDate.getDate());
+      if (nextOccurrence.getTime() < todayTime) {
+        nextOccurrence = new Date(today.getFullYear() + 1, eventDate.getMonth(), eventDate.getDate());
+      }
+    } else {
+      nextOccurrence = eventDate;
+      if (nextOccurrence.getTime() < todayTime) return null;
     }
+
     const diffMs = nextOccurrence.getTime() - todayTime;
     const daysUntil = Math.round(diffMs / (1000 * 60 * 60 * 24));
-    return { ...e, nextOccurrence, daysUntil };
-  }).sort((a, b) => a.daysUntil - b.daysUntil)
-    .slice(0, 4);
+    // Only show events within 60 days
+    if (daysUntil > 60) return null;
+    return { ...e, nextOccurrence, daysUntil, matchedKeyword: matched };
+  }).filter(Boolean)
+    .sort((a, b) => a.daysUntil - b.daysUntil)
+    .slice(0, 6);
 
-  if (birthdays.length === 0) {
+  if (upcoming.length === 0) {
     els.birthdayMarquee.classList.add('hidden');
     return;
   }
 
   els.birthdayMarquee.classList.remove('hidden');
 
-  const items = birthdays.map(b => {
+  const items = upcoming.map(b => {
     const isToday = b.daysUntil === 0;
     const isTomorrow = b.daysUntil === 1;
     let label;
     if (isToday) label = 'TODAY!';
     else if (isTomorrow) label = 'Tomorrow';
     else label = `in ${b.daysUntil} days`;
-    const icon = isToday ? '\u{1F382}' : '\u{1F381}';
+    const icon = isToday ? b.matchedKeyword.icon : b.matchedKeyword.iconUpcoming;
     return `<span class="marquee-item${isToday ? ' marquee-today' : ''}">${icon} ${escapeHtml(b.title)} \u2014 ${label}</span>`;
   }).join('');
 
