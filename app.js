@@ -52,6 +52,12 @@ const els = {
   eventRecurrence: $('#eventRecurrence'),
   eventRecurrenceEnd: $('#eventRecurrenceEnd'),
   recurrenceEndRow: $('#recurrenceEndRow'),
+  conflictOverlay: $('#conflictOverlay'),
+  conflictMessage: $('#conflictMessage'),
+  conflictExisting: $('#conflictExisting'),
+  conflictCancel: $('#conflictCancel'),
+  conflictReplace: $('#conflictReplace'),
+  conflictKeepBoth: $('#conflictKeepBoth'),
   modalCancel: $('#modalCancel'),
   modalTitle: $('#modalTitle'),
   progressBar: $('#progressBar'),
@@ -679,6 +685,74 @@ function renderFocusMode() {
   });
 }
 
+// ===== Conflict Detection =====
+let pendingConflictEvent = null;
+let conflictingEvents = [];
+
+function findConflicts(date, time) {
+  if (!time) return [];
+  return getEventsForDate(date).filter(e => e.time === time);
+}
+
+function showConflictDialog(newEvent, conflicts) {
+  pendingConflictEvent = newEvent;
+  conflictingEvents = conflicts;
+
+  els.conflictMessage.textContent = `You already have ${conflicts.length === 1 ? 'something' : conflicts.length + ' events'} scheduled at ${formatTime(newEvent.time)} on ${formatDisplay(new Date(newEvent.date + 'T00:00:00'))}:`;
+
+  els.conflictExisting.innerHTML = conflicts.map(e => `
+    <div class="conflict-event-item cat-${e.category}">
+      ${getPriorityIcon(e.priority)}
+      <span class="conflict-event-title">${escapeHtml(e.title)}</span>
+      <span class="conflict-event-cat">${e.category}</span>
+    </div>
+  `).join('');
+
+  els.conflictOverlay.classList.remove('hidden');
+}
+
+function closeConflictDialog() {
+  els.conflictOverlay.classList.add('hidden');
+  pendingConflictEvent = null;
+  conflictingEvents = [];
+}
+
+function addEventWithConflictCheck(event, source) {
+  if (!event.time) {
+    // No time = no conflict possible
+    commitAddEvent(event, source);
+    return;
+  }
+
+  const conflicts = findConflicts(event.date, event.time);
+  if (conflicts.length > 0) {
+    pendingConflictEvent = { event, source };
+    showConflictDialog(event, conflicts);
+  } else {
+    commitAddEvent(event, source);
+  }
+}
+
+function commitAddEvent(event, source) {
+  addEvent(event);
+  if (source === 'chat') {
+    const dateObj = new Date(event.date + 'T00:00:00');
+    const dateDisplay = formatDisplay(dateObj);
+    const timeDisplay = event.time ? ` at ${formatTime(event.time)}` : '';
+    const categoryLabels = {
+      objective: 'objective', meeting: 'meeting', deadline: 'deadline',
+      reminder: 'reminder', personal: 'personal event'
+    };
+    const priorityLabel = event.priority !== 'medium' ? ` [${event.priority} priority]` : '';
+    const endLabel = event.recurrenceEnd ? ` until ${formatDisplay(new Date(event.recurrenceEnd + 'T00:00:00'))}` : '';
+    const recurrenceLabel = event.recurrence !== 'none' ? ` (repeats ${event.recurrence}${endLabel})` : '';
+    const response = `Added "${event.title}" as a ${categoryLabels[event.category]} on ${dateDisplay}${timeDisplay}${priorityLabel}${recurrenceLabel}.`;
+    addChatMessage(response, 'bot');
+  } else if (source === 'modal') {
+    closeModal();
+  }
+}
+
 // ===== Events CRUD =====
 function addEvent(event) {
   event.completed = event.completed || false;
@@ -884,22 +958,7 @@ function handleChat(text) {
     completedDates: [],
   };
 
-  addEvent(event);
-
-  const dateObj = new Date(event.date + 'T00:00:00');
-  const dateDisplay = formatDisplay(dateObj);
-  const timeDisplay = event.time ? ` at ${formatTime(event.time)}` : '';
-  const categoryLabels = {
-    objective: 'objective', meeting: 'meeting', deadline: 'deadline',
-    reminder: 'reminder', personal: 'personal event'
-  };
-  const priorityLabel = event.priority !== 'medium' ? ` [${event.priority} priority]` : '';
-  const endLabel = event.recurrenceEnd ? ` until ${formatDisplay(new Date(event.recurrenceEnd + 'T00:00:00'))}` : '';
-  const recurrenceLabel = event.recurrence !== 'none' ? ` (repeats ${event.recurrence}${endLabel})` : '';
-
-  const response = `Added "${event.title}" as a ${categoryLabels[event.category]} on ${dateDisplay}${timeDisplay}${priorityLabel}${recurrenceLabel}.`;
-  addChatMessage(response, 'bot');
-
+  addEventWithConflictCheck(event, 'chat');
   els.chatInput.value = '';
 }
 
@@ -974,9 +1033,39 @@ els.eventForm.addEventListener('submit', (e) => {
     completedDates: [],
   };
   if (event.title) {
-    addEvent(event);
-    closeModal();
+    addEventWithConflictCheck(event, 'modal');
   }
+});
+
+// Conflict dialog buttons
+els.conflictCancel.addEventListener('click', () => {
+  closeConflictDialog();
+});
+
+els.conflictKeepBoth.addEventListener('click', () => {
+  if (pendingConflictEvent) {
+    const { event, source } = pendingConflictEvent;
+    closeConflictDialog();
+    commitAddEvent(event, source);
+  }
+});
+
+els.conflictReplace.addEventListener('click', () => {
+  if (pendingConflictEvent) {
+    const { event, source } = pendingConflictEvent;
+    // Delete the conflicting events
+    conflictingEvents.forEach(c => {
+      state.events = state.events.filter(e => e.id !== c.id);
+    });
+    saveEvents();
+    closeConflictDialog();
+    commitAddEvent(event, source);
+    addChatMessage(`Replaced ${conflictingEvents.length} conflicting event${conflictingEvents.length > 1 ? 's' : ''}.`, 'bot');
+  }
+});
+
+els.conflictOverlay.addEventListener('click', (e) => {
+  if (e.target === els.conflictOverlay) closeConflictDialog();
 });
 
 // Show/hide recurrence end date when recurrence changes
@@ -1001,7 +1090,8 @@ els.focusClose.addEventListener('click', toggleFocusMode);
 // Close modals on Escape
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
-    if (state.focusMode) toggleFocusMode();
+    if (!els.conflictOverlay.classList.contains('hidden')) closeConflictDialog();
+    else if (state.focusMode) toggleFocusMode();
     else closeModal();
   }
 });

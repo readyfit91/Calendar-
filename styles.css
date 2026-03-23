@@ -933,6 +933,77 @@ body {
   color: white;
 }
 
+/* ===== Conflict Dialog ===== */
+.conflict-modal {
+  max-width: 420px;
+}
+
+.conflict-message {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin-bottom: 12px;
+  line-height: 1.5;
+}
+
+.conflict-existing {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 20px;
+}
+
+.conflict-event-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--surface-2);
+  border-radius: var(--radius);
+  border-left: 3px solid var(--primary);
+  font-size: 0.85rem;
+}
+
+.conflict-event-title {
+  flex: 1;
+  font-weight: 500;
+}
+
+.conflict-event-cat {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+.conflict-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.conflict-actions button {
+  padding: 8px 16px;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+#conflictCancel {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.btn-danger {
+  background: var(--accent-red) !important;
+  color: white !important;
+}
+
+.btn-primary {
+  background: var(--primary) !important;
+  color: white !important;
+}
+
 /* ===== Focus Mode Overlay ===== */
 .focus-overlay {
   position: fixed;

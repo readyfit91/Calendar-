@@ -169,6 +169,20 @@
     </div>
   </div>
 
+  <!-- Conflict Dialog -->
+  <div class="modal-overlay hidden" id="conflictOverlay">
+    <div class="modal conflict-modal">
+      <h3>Scheduling Conflict</h3>
+      <p class="conflict-message" id="conflictMessage"></p>
+      <div class="conflict-existing" id="conflictExisting"></div>
+      <div class="conflict-actions">
+        <button type="button" id="conflictCancel">Cancel</button>
+        <button type="button" id="conflictReplace" class="btn-danger">Replace Existing</button>
+        <button type="button" id="conflictKeepBoth" class="btn-primary">Keep Both</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Focus Mode Overlay -->
   <div class="focus-overlay hidden" id="focusOverlay">
     <div class="focus-panel">
