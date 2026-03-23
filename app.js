@@ -52,6 +52,7 @@ const els = {
   eventRecurrence: $('#eventRecurrence'),
   eventRecurrenceEnd: $('#eventRecurrenceEnd'),
   recurrenceEndRow: $('#recurrenceEndRow'),
+  birthdayList: $('#birthdayList'),
   conflictOverlay: $('#conflictOverlay'),
   conflictMessage: $('#conflictMessage'),
   conflictExisting: $('#conflictExisting'),
@@ -279,6 +280,7 @@ function render() {
 
   renderDailyObjectives(today);
   renderHorizon(today);
+  renderBirthdayCountdown(today);
 
   if (state.view === 'month') {
     renderMonthView();
@@ -390,6 +392,61 @@ function renderHorizon(today) {
 
   els.horizonList.innerHTML = html;
   bindObjectiveEvents(els.horizonList);
+}
+
+function renderBirthdayCountdown(today) {
+  // Find all events with "birthday" in the title
+  const birthdayEvents = state.events.filter(e =>
+    e.title.toLowerCase().includes('birthday')
+  );
+
+  if (birthdayEvents.length === 0) {
+    els.birthdayList.innerHTML = '<div class="empty-state">No birthdays tracked yet. Add events with "birthday" in the title!</div>';
+    return;
+  }
+
+  const todayTime = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
+
+  // Calculate next occurrence and days until for each birthday
+  const birthdays = birthdayEvents.map(e => {
+    const eventDate = new Date(e.date + 'T00:00:00');
+    // Find the next occurrence this year or next
+    let nextOccurrence = new Date(today.getFullYear(), eventDate.getMonth(), eventDate.getDate());
+    if (nextOccurrence.getTime() < todayTime) {
+      nextOccurrence = new Date(today.getFullYear() + 1, eventDate.getMonth(), eventDate.getDate());
+    }
+    const diffMs = nextOccurrence.getTime() - todayTime;
+    const daysUntil = Math.round(diffMs / (1000 * 60 * 60 * 24));
+    return { ...e, nextOccurrence, daysUntil };
+  }).sort((a, b) => a.daysUntil - b.daysUntil);
+
+  els.birthdayList.innerHTML = birthdays.map(b => {
+    const isToday = b.daysUntil === 0;
+    const isTomorrow = b.daysUntil === 1;
+    const isThisWeek = b.daysUntil <= 7;
+
+    let countdownText;
+    if (isToday) countdownText = 'Today!';
+    else if (isTomorrow) countdownText = 'Tomorrow!';
+    else if (isThisWeek) countdownText = `${b.daysUntil} days away`;
+    else if (b.daysUntil <= 30) countdownText = `${b.daysUntil} days away`;
+    else {
+      const weeks = Math.floor(b.daysUntil / 7);
+      countdownText = `${weeks} week${weeks > 1 ? 's' : ''} away`;
+    }
+
+    const urgencyClass = isToday ? 'birthday-today' : isThisWeek ? 'birthday-soon' : '';
+    const dateLabel = formatShortDate(b.nextOccurrence);
+
+    return `<div class="birthday-card ${urgencyClass}">
+      <div class="birthday-icon">${isToday ? '&#x1F382;' : '&#x1F381;'}</div>
+      <div class="birthday-info">
+        <div class="birthday-name">${escapeHtml(b.title)}</div>
+        <div class="birthday-date">${dateLabel}</div>
+      </div>
+      <div class="birthday-countdown">${countdownText}</div>
+    </div>`;
+  }).join('');
 }
 
 function renderMonthView() {

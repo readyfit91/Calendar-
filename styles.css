@@ -457,6 +457,91 @@ body {
   text-transform: uppercase;
 }
 
+/* ===== Birthday Countdown ===== */
+.birthday-section {
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.birthday-heading {
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: 12px;
+  color: var(--text);
+}
+
+.birthday-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.birthday-list .empty-state {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.birthday-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--surface-2);
+  border-radius: var(--radius);
+  border-left: 3px solid var(--accent-purple);
+  transition: background 0.15s;
+}
+
+.birthday-card:hover {
+  background: var(--border);
+}
+
+.birthday-card.birthday-today {
+  border-left-color: var(--accent-green);
+  background: rgba(34, 197, 94, 0.1);
+}
+
+.birthday-card.birthday-soon {
+  border-left-color: var(--accent-orange);
+}
+
+.birthday-icon {
+  font-size: 1.2rem;
+  flex-shrink: 0;
+}
+
+.birthday-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.birthday-name {
+  font-size: 0.82rem;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.birthday-date {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
+.birthday-countdown {
+  font-size: 0.7rem;
+  font-weight: 700;
+  white-space: nowrap;
+  color: var(--accent-orange);
+  flex-shrink: 0;
+}
+
+.birthday-today .birthday-countdown {
+  color: var(--accent-green);
+}
+
 /* ===== Calendar Container ===== */
 .calendar-container {
   flex: 1;
