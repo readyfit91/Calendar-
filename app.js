@@ -1484,9 +1484,15 @@ async function initApp(user) {
   render();
 }
 
+function usernameToEmail(username) {
+  // If user already typed an email, use it as-is
+  if (username.includes('@')) return username;
+  return `${username.toLowerCase()}@calendar.local`;
+}
+
 authEls.form.addEventListener('submit', async (e) => {
   e.preventDefault();
-  const email = authEls.email.value.trim();
+  const email = usernameToEmail(authEls.email.value.trim());
   const password = authEls.password.value;
 
   const { data, error } = await db.auth.signInWithPassword({ email, password });
@@ -1498,11 +1504,12 @@ authEls.form.addEventListener('submit', async (e) => {
 });
 
 authEls.signUp.addEventListener('click', async () => {
-  const email = authEls.email.value.trim();
+  const username = authEls.email.value.trim();
+  const email = usernameToEmail(username);
   const password = authEls.password.value;
 
-  if (!email || password.length < 6) {
-    showAuthError('Enter a valid email and password (min 6 chars).');
+  if (!username || password.length < 6) {
+    showAuthError('Enter a username and password (min 6 chars).');
     return;
   }
 
@@ -1510,12 +1517,11 @@ authEls.signUp.addEventListener('click', async () => {
   if (error) {
     showAuthError(error.message);
   } else if (data.user && !data.user.confirmed_at && data.user.identities?.length === 0) {
-    showAuthError('An account with this email already exists.');
+    showAuthError('That username is already taken.');
   } else if (data.session) {
-    // Auto-confirmed (email confirmation disabled)
     await initApp(data.user);
   } else {
-    showAuthInfo('Account created! Check your email to confirm, then sign in.');
+    showAuthInfo('Account created! You can now sign in.');
   }
 });
 
