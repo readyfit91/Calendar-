@@ -865,20 +865,24 @@ function renderFocusMode() {
 let pendingConflictEvent = null;
 let conflictingEvents = [];
 
-function findConflicts(date, time) {
-  if (!time) return [];
-  return getEventsForDate(date).filter(e => e.time === time);
+function findExistingEvents(date) {
+  return getEventsForDate(date);
 }
 
-function showConflictDialog(newEvent, conflicts) {
+function showConflictDialog(newEvent, existing) {
   pendingConflictEvent = newEvent;
-  conflictingEvents = conflicts;
+  conflictingEvents = existing;
 
-  els.conflictMessage.textContent = `You already have ${conflicts.length === 1 ? 'something' : conflicts.length + ' events'} scheduled at ${formatTime(newEvent.time)} on ${formatDisplay(new Date(newEvent.date + 'T00:00:00'))}:`;
+  const dateDisplay = formatDisplay(new Date(newEvent.date + 'T00:00:00'));
+  const timeNote = newEvent.time ? ` at ${formatTime(newEvent.time)}` : '';
+  const count = existing.length === 1 ? '1 event' : `${existing.length} events`;
 
-  els.conflictExisting.innerHTML = conflicts.map(e => `
+  els.conflictMessage.textContent = `You already have ${count} on ${dateDisplay}${timeNote}:`;
+
+  els.conflictExisting.innerHTML = existing.map(e => `
     <div class="conflict-event-item cat-${e.category}">
       ${getPriorityIcon(e.priority)}
+      ${e.time ? `<span class="conflict-event-time">${formatTime(e.time)}</span>` : ''}
       <span class="conflict-event-title">${escapeHtml(e.title)}</span>
       <span class="conflict-event-cat">${e.category}</span>
     </div>
@@ -894,16 +898,10 @@ function closeConflictDialog() {
 }
 
 function addEventWithConflictCheck(event, source) {
-  if (!event.time) {
-    // No time = no conflict possible
-    commitAddEvent(event, source);
-    return;
-  }
-
-  const conflicts = findConflicts(event.date, event.time);
-  if (conflicts.length > 0) {
+  const existing = findExistingEvents(event.date);
+  if (existing.length > 0) {
     pendingConflictEvent = { event, source };
-    showConflictDialog(event, conflicts);
+    showConflictDialog(event, existing);
   } else {
     commitAddEvent(event, source);
   }

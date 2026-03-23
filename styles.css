@@ -1198,6 +1198,13 @@ body {
   font-size: 0.85rem;
 }
 
+.conflict-event-time {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--accent-blue);
+  white-space: nowrap;
+}
+
 .conflict-event-title {
   flex: 1;
   font-weight: 500;
