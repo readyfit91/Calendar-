@@ -1132,6 +1132,13 @@ body {
   margin-top: 0;
 }
 
+.query-range-label {
+  font-size: 0.7rem;
+  color: var(--text-dim);
+  padding: 2px 4px 4px;
+  opacity: 0.8;
+}
+
 .query-event-card {
   display: flex;
   align-items: center;

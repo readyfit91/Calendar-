@@ -1214,6 +1214,31 @@ function tryHandleQuery(text) {
     return handleMonthQuery(monthQueryMatch.toLowerCase(), monthNames);
   }
 
+  // "this month" / "the month" / "my month" → current month range query
+  if (lower.match(/\b(this|the|my|current)\s+month\b/)) {
+    const today = new Date();
+    const monthName = monthNames[today.getMonth()];
+    return handleMonthQuery(monthName, monthNames);
+  }
+
+  // "next month" → next month range query
+  if (lower.match(/\bnext\s+month\b/)) {
+    const today = new Date();
+    const nextMonth = (today.getMonth() + 1) % 12;
+    const monthName = monthNames[nextMonth];
+    return handleMonthQuery(monthName, monthNames);
+  }
+
+  // "this week" / "my week" / "the week" → current week range query
+  if (lower.match(/\b(this|the|my|current)\s+week\b/)) {
+    return handleWeekQuery(0);
+  }
+
+  // "next week" → next week range query
+  if (lower.match(/\bnext\s+week\b/)) {
+    return handleWeekQuery(1);
+  }
+
   // Parse the date from the query
   const date = parseDateFromText(text);
   if (!date) {
@@ -1327,6 +1352,84 @@ function handleMonthQuery(monthName, monthNames) {
   return true;
 }
 
+function handleWeekQuery(weekOffset) {
+  const today = new Date();
+  const startOfWeek = new Date(today);
+  // Start from Sunday of current week
+  startOfWeek.setDate(today.getDate() - today.getDay() + (weekOffset * 7));
+  const endOfWeek = new Date(startOfWeek);
+  endOfWeek.setDate(startOfWeek.getDate() + 6);
+
+  const weekLabel = weekOffset === 0 ? 'This Week' : 'Next Week';
+  const rangeLabel = `${formatDisplay(startOfWeek)} – ${formatDisplay(endOfWeek)}`;
+
+  // Collect all events across the week
+  const allEvents = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(startOfWeek);
+    d.setDate(startOfWeek.getDate() + i);
+    const dateStr = formatDate(d);
+    const dayEvents = getEventsForDate(dateStr);
+    dayEvents.forEach(e => {
+      if (!allEvents.find(x => x.id === e.id && x._displayDate === dateStr)) {
+        allEvents.push({ ...e, _displayDate: dateStr });
+      }
+    });
+  }
+
+  allEvents.sort((a, b) => a._displayDate.localeCompare(b._displayDate) || (a.time || '').localeCompare(b.time || ''));
+
+  if (allEvents.length === 0) {
+    addChatBotHtml(`<div class="query-response">
+      <div class="query-header empty">
+        <span class="query-date-label">${weekLabel}</span>
+        <span class="query-summary">Nothing planned</span>
+      </div>
+      <div class="query-empty-msg">Your schedule is clear for ${weekLabel.toLowerCase()}! (${rangeLabel})</div>
+    </div>`);
+    state.currentDate = new Date(startOfWeek);
+    render();
+    return true;
+  }
+
+  // Group events by date
+  const grouped = {};
+  allEvents.forEach(e => {
+    if (!grouped[e._displayDate]) grouped[e._displayDate] = [];
+    grouped[e._displayDate].push(e);
+  });
+
+  const categoryIcons = getQueryCategoryIcons();
+
+  let cardsHtml = '';
+  for (const [dateStr, events] of Object.entries(grouped)) {
+    const dateObj = new Date(dateStr + 'T00:00:00');
+    const dayName = dateObj.toLocaleDateString('en-US', { weekday: 'long' });
+    const dateLabel = `${dayName}, ${formatDisplay(dateObj)}`;
+    cardsHtml += `<div class="query-date-group"><div class="query-date-divider">${dateLabel}</div>`;
+    events.forEach(e => {
+      cardsHtml += renderQueryEventCard(e, categoryIcons);
+    });
+    cardsHtml += '</div>';
+  }
+
+  const summary = allEvents.length === 1 ? '1 item' : `${allEvents.length} items`;
+  const completed = allEvents.filter(e => e.completed).length;
+
+  addChatBotHtml(`<div class="query-response">
+    <div class="query-header">
+      <span class="query-date-label">${weekLabel}</span>
+      <span class="query-summary">${summary}${completed > 0 ? ' &middot; ' + completed + ' done' : ''}</span>
+    </div>
+    <div class="query-range-label">${rangeLabel}</div>
+    <div class="query-event-list">${cardsHtml}</div>
+  </div>`);
+
+  state.currentDate = new Date(startOfWeek);
+  render();
+  return true;
+}
+
 function getQueryCategoryIcons() {
   return {
     objective: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>',
@@ -1427,7 +1530,8 @@ function parseDateFromText(text) {
     return new Date(y, m, day);
   }
 
-  // "this week" → show today
+  // "this week" / "my week" are handled as range queries in tryHandleQuery — shouldn't reach here
+  // but fallback to today just in case
   if (lower.includes('this week') || lower.includes('my week')) return today;
 
   // Fallback: if nothing matched but it's a query, assume today
