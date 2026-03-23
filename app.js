@@ -231,11 +231,14 @@ function getRecurrenceIcon(recurrence, recurrenceEnd) {
 }
 
 let _syncTimer = null;
-async function saveEvents() {
-  // Always keep localStorage as offline fallback (instant)
+function saveEventsLocal() {
+  // Save to localStorage only (used by realtime handlers to avoid sync loops)
   localStorage.setItem('calendarEvents', JSON.stringify(state.events));
+}
 
-  // Sync to Supabase immediately (not debounced) so other devices see changes
+async function saveEvents() {
+  // Save locally + sync to Supabase so other devices see changes immediately
+  saveEventsLocal();
   await _syncToSupabase();
 }
 
@@ -324,12 +327,22 @@ function rowToEvent(row) {
 
 async function syncEventToSupabase(event) {
   if (!state.user) return;
-  await db.from('calendar_events').upsert(eventToRow(event));
+  try {
+    const { error } = await db.from('calendar_events').upsert(eventToRow(event));
+    if (error) console.error('syncEvent error:', error.message);
+  } catch (err) {
+    console.error('syncEvent failed:', err.message);
+  }
 }
 
 async function deleteEventFromSupabase(id) {
   if (!state.user) return;
-  await db.from('calendar_events').delete().eq('id', id);
+  try {
+    const { error } = await db.from('calendar_events').delete().eq('id', id).eq('user_id', state.user.id);
+    if (error) console.error('deleteEvent error:', error.message);
+  } catch (err) {
+    console.error('deleteEvent failed:', err.message);
+  }
 }
 
 async function loadFromSupabase() {
@@ -2086,7 +2099,7 @@ function startRealtimeSync() {
         const newEvent = rowToEvent(payload.new);
         if (!state.events.find(e => e.id === newEvent.id)) {
           state.events.push(newEvent);
-          saveEvents();
+          saveEventsLocal();
           render();
         }
       } else if (payload.eventType === 'UPDATE') {
@@ -2097,12 +2110,12 @@ function startRealtimeSync() {
         } else {
           state.events.push(updated);
         }
-        saveEvents();
+        saveEventsLocal();
         render();
         if (state.focusMode) renderFocusMode();
       } else if (payload.eventType === 'DELETE') {
         state.events = state.events.filter(e => e.id !== payload.old.id);
-        saveEvents();
+        saveEventsLocal();
         render();
         if (state.focusMode) renderFocusMode();
       }
