@@ -1121,15 +1121,19 @@ function tryHandleQuery(text) {
 
   // Detect query patterns
   const queryPatterns = [
-    /what('s| is| do i have| have i got|s)?\s+(planned|scheduled|on|happening|going on|coming up)/i,
-    /do i have (anything|something|any ?thing)/i,
-    /show (me )?(my )?(events?|schedule|plans?|calendar)/i,
+    /what(.{0,20})(planned|scheduled|happening|going on|coming up|on the calendar)/i,
+    /what do (we|i|you) have/i,
+    /do (we|i) have (anything|something|any ?thing)/i,
+    /show (me )?(my |our )?(events?|schedule|plans?|calendar)/i,
     /anything (planned|scheduled|on|happening)/i,
     /what('s| is) (on|for)/i,
     /plans? for/i,
     /schedule for/i,
-    /how('s| does)? my (day|week|month) look/i,
+    /how('s| does)? (my|our|the) (day|week|month) look/i,
     /read (back|me)/i,
+    /what('s| is) (planned|scheduled|happening)/i,
+    /is (there )?(anything|something|any ?thing) (on|planned|scheduled|happening)/i,
+    /are (we|there) .{0,10}(planned|scheduled|free|busy|booked)/i,
   ];
 
   const isQuery = queryPatterns.some(p => p.test(lower));
