@@ -1055,6 +1055,37 @@ function parseChat(text) {
     result.date = `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
   }
 
+  // Match date ranges: "04/01-05/01", "4/1 - 5/1", "04/01/2026-05/01/2026"
+  // Also match "March 1 - April 5", "March 1-April 5"
+  const numRangeMatch = text.match(/\b(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\s*[-–—to]+\s*(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b/);
+  const monthRangeMatch = !numRangeMatch ? text.match(new RegExp(
+    `\\b(${monthNames.join('|')})\\s+(\\d{1,2})(?:st|nd|rd|th)?(?:\\s*,?\\s*(\\d{4}))?\\s*[-–—]\\s*(${monthNames.join('|')})\\s+(\\d{1,2})(?:st|nd|rd|th)?(?:\\s*,?\\s*(\\d{4}))?`, 'i'
+  )) : null;
+
+  if (numRangeMatch && !result.date) {
+    const sm = parseInt(numRangeMatch[1]);
+    const sd = parseInt(numRangeMatch[2]);
+    let sy = numRangeMatch[3] ? parseInt(numRangeMatch[3]) : today.getFullYear();
+    if (sy < 100) sy += 2000;
+    const em = parseInt(numRangeMatch[4]);
+    const ed = parseInt(numRangeMatch[5]);
+    let ey = numRangeMatch[6] ? parseInt(numRangeMatch[6]) : today.getFullYear();
+    if (ey < 100) ey += 2000;
+    result.date = `${sy}-${String(sm).padStart(2, '0')}-${String(sd).padStart(2, '0')}`;
+    result.recurrence = 'daily';
+    result.recurrenceEnd = `${ey}-${String(em).padStart(2, '0')}-${String(ed).padStart(2, '0')}`;
+  } else if (monthRangeMatch && !result.date) {
+    const sm = monthNames.indexOf(monthRangeMatch[1].toLowerCase());
+    const sd = parseInt(monthRangeMatch[2]);
+    const sy = monthRangeMatch[3] ? parseInt(monthRangeMatch[3]) : today.getFullYear();
+    const em = monthNames.indexOf(monthRangeMatch[4].toLowerCase());
+    const ed = parseInt(monthRangeMatch[5]);
+    const ey = monthRangeMatch[6] ? parseInt(monthRangeMatch[6]) : today.getFullYear();
+    result.date = `${sy}-${String(sm + 1).padStart(2, '0')}-${String(sd).padStart(2, '0')}`;
+    result.recurrence = 'daily';
+    result.recurrenceEnd = `${ey}-${String(em + 1).padStart(2, '0')}-${String(ed).padStart(2, '0')}`;
+  }
+
   // Match numeric dates but NOT ones preceded by "until" (those are recurrence end dates)
   const numDateMatch = text.match(/(?<!\buntil\s)\b(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b/);
   if (numDateMatch && !result.date) {
