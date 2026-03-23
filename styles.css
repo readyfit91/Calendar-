@@ -632,6 +632,9 @@ body {
   color: #fbbf24;
   font-weight: 700;
 }
+.marquee-item.marquee-special {
+  color: var(--primary-light, #93c5fd);
+}
 
 @keyframes marquee-scroll {
   0%   { transform: translateX(0); }

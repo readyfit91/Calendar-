@@ -593,20 +593,19 @@ function renderHorizon(today) {
 }
 
 function renderBirthdayCountdown(today) {
-  const marqueeEvents = state.events.filter(e => {
-    const lower = e.title.toLowerCase();
-    return MARQUEE_KEYWORDS.some(k => lower.includes(k.keyword));
-  });
-
-  if (marqueeEvents.length === 0) {
-    els.birthdayMarquee.classList.add('hidden');
-    return;
-  }
-
   const todayTime = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
 
-  // Calculate next occurrence and days until
-  const upcoming = marqueeEvents.map(e => {
+  // Default icon for non-keyword events by category
+  const categoryIcons = {
+    objective: '\u{1F3AF}',
+    meeting: '\u{1F91D}',
+    deadline: '\u{23F0}',
+    reminder: '\u{1F514}',
+    personal: '\u{1F4CC}',
+  };
+
+  // Build upcoming list from ALL events
+  const upcoming = state.events.map(e => {
     const lower = e.title.toLowerCase();
     const matched = MARQUEE_KEYWORDS.find(k => lower.includes(k.keyword));
     const eventDate = new Date(e.date + 'T00:00:00');
@@ -625,29 +624,44 @@ function renderBirthdayCountdown(today) {
 
     const diffMs = nextOccurrence.getTime() - todayTime;
     const daysUntil = Math.round(diffMs / (1000 * 60 * 60 * 24));
-    // Only show events within 60 days
     if (daysUntil > 60) return null;
-    return { ...e, nextOccurrence, daysUntil, matchedKeyword: matched };
-  }).filter(Boolean)
-    .sort((a, b) => a.daysUntil - b.daysUntil)
-    .slice(0, 6);
 
-  if (upcoming.length === 0) {
+    // Use keyword icon if matched, otherwise use category icon
+    const iconToday = matched ? matched.icon : (categoryIcons[e.category] || '\u{1F4C5}');
+    const iconUpcoming = matched ? matched.iconUpcoming : (categoryIcons[e.category] || '\u{1F4C5}');
+
+    return { ...e, nextOccurrence, daysUntil, iconToday, iconUpcoming, isSpecial: !!matched };
+  }).filter(Boolean)
+    .sort((a, b) => a.daysUntil - b.daysUntil);
+
+  // Deduplicate recurring events (same id, keep earliest occurrence)
+  const seen = new Set();
+  const deduped = upcoming.filter(e => {
+    if (seen.has(e.id)) return false;
+    seen.add(e.id);
+    return true;
+  });
+
+  // Take up to 5 items
+  const shown = deduped.slice(0, 5);
+
+  if (shown.length === 0) {
     els.birthdayMarquee.classList.add('hidden');
     return;
   }
 
   els.birthdayMarquee.classList.remove('hidden');
 
-  const items = upcoming.map(b => {
+  const items = shown.map(b => {
     const isToday = b.daysUntil === 0;
     const isTomorrow = b.daysUntil === 1;
     let label;
     if (isToday) label = 'TODAY!';
     else if (isTomorrow) label = 'Tomorrow';
     else label = `in ${b.daysUntil} days`;
-    const icon = isToday ? b.matchedKeyword.icon : b.matchedKeyword.iconUpcoming;
-    return `<span class="marquee-item${isToday ? ' marquee-today' : ''}">${icon} ${escapeHtml(b.title)} \u2014 ${label}</span>`;
+    const icon = isToday ? b.iconToday : b.iconUpcoming;
+    const cssClass = isToday ? ' marquee-today' : (b.isSpecial ? ' marquee-special' : '');
+    return `<span class="marquee-item${cssClass}">${icon} ${escapeHtml(b.title)} \u2014 ${label}</span>`;
   }).join('');
 
   // Duplicate content for seamless infinite scroll
