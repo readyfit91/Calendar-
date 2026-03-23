@@ -1,7 +1,8 @@
 // ===== Supabase Setup =====
 const SUPABASE_URL = 'https://llvujuehggjckxrtoool.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxsdnVqdWVoZ2dqY2t4cnRvb29sIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM3MTQ4MDcsImV4cCI6MjA4OTI5MDgwN30.irXnI7_h-Z_RGPRcvhOyC0nF_atAFDXaRHv2m5iCRd0';
-const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const { createClient } = window.supabase;
+const db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 // ===== State =====
 const state = {
@@ -167,7 +168,7 @@ async function saveEvents() {
 async function saveStreaks() {
   localStorage.setItem('calendarStreaks', JSON.stringify(state.streaks));
   if (state.user) {
-    await supabase.from('calendar_streaks').upsert({
+    await db.from('calendar_streaks').upsert({
       user_id: state.user.id,
       current_streak: state.streaks.current,
       best_streak: state.streaks.best,
@@ -211,12 +212,12 @@ function rowToEvent(row) {
 
 async function syncEventToSupabase(event) {
   if (!state.user) return;
-  await supabase.from('calendar_events').upsert(eventToRow(event));
+  await db.from('calendar_events').upsert(eventToRow(event));
 }
 
 async function deleteEventFromSupabase(id) {
   if (!state.user) return;
-  await supabase.from('calendar_events').delete().eq('id', id);
+  await db.from('calendar_events').delete().eq('id', id);
 }
 
 async function loadFromSupabase() {
@@ -275,11 +276,11 @@ async function migrateLocalToSupabase() {
     completedDates: e.completedDates || [],
   }));
 
-  await supabase.from('calendar_events').upsert(rows);
+  await db.from('calendar_events').upsert(rows);
 
   const localStreaks = JSON.parse(localStorage.getItem('calendarStreaks') || '{}');
   if (localStreaks.current || localStreaks.best) {
-    await supabase.from('calendar_streaks').upsert({
+    await db.from('calendar_streaks').upsert({
       user_id: state.user.id,
       current_streak: localStreaks.current || 0,
       best_streak: localStreaks.best || 0,
@@ -1345,7 +1346,7 @@ authEls.form.addEventListener('submit', async (e) => {
   const email = authEls.email.value.trim();
   const password = authEls.password.value;
 
-  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+  const { data, error } = await db.auth.signInWithPassword({ email, password });
   if (error) {
     showAuthError(error.message);
   } else {
@@ -1362,7 +1363,7 @@ authEls.signUp.addEventListener('click', async () => {
     return;
   }
 
-  const { data, error } = await supabase.auth.signUp({ email, password });
+  const { data, error } = await db.auth.signUp({ email, password });
   if (error) {
     showAuthError(error.message);
   } else if (data.user && !data.user.confirmed_at && data.user.identities?.length === 0) {
@@ -1376,7 +1377,7 @@ authEls.signUp.addEventListener('click', async () => {
 });
 
 authEls.signOutBtn.addEventListener('click', async () => {
-  await supabase.auth.signOut();
+  await db.auth.signOut();
   state.user = null;
   state.events = [];
   state.streaks = { current: 0, best: 0, lastCompletedDate: null };
@@ -1385,7 +1386,7 @@ authEls.signOutBtn.addEventListener('click', async () => {
 
 // ===== Check Existing Session =====
 (async () => {
-  const { data: { session } } = await supabase.auth.getSession();
+  const { data: { session } } = await db.auth.getSession();
   if (session?.user) {
     await initApp(session.user);
   } else {
