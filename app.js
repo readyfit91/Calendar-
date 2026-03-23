@@ -15,6 +15,7 @@ state.events = state.events.map(e => ({
   completed: e.completed || false,
   priority: e.priority || 'medium',
   recurrence: e.recurrence || 'none',
+  recurrenceEnd: e.recurrenceEnd || null,
   completedDates: e.completedDates || [],
 }));
 saveEvents();
@@ -49,6 +50,8 @@ const els = {
   eventCategory: $('#eventCategory'),
   eventPriority: $('#eventPriority'),
   eventRecurrence: $('#eventRecurrence'),
+  eventRecurrenceEnd: $('#eventRecurrenceEnd'),
+  recurrenceEndRow: $('#recurrenceEndRow'),
   modalCancel: $('#modalCancel'),
   modalTitle: $('#modalTitle'),
   progressBar: $('#progressBar'),
@@ -125,6 +128,8 @@ function doesRecurrenceMatch(event, dateStr, targetDate) {
   const startDate = new Date(event.date + 'T00:00:00');
   // Don't show instances before the start date
   if (dateStr < event.date) return false;
+  // Don't show instances after the end date
+  if (event.recurrenceEnd && dateStr > event.recurrenceEnd) return false;
   // Original date always matches
   if (dateStr === event.date) return true;
 
@@ -145,10 +150,11 @@ function doesRecurrenceMatch(event, dateStr, targetDate) {
   }
 }
 
-function getRecurrenceIcon(recurrence) {
+function getRecurrenceIcon(recurrence, recurrenceEnd) {
   if (!recurrence || recurrence === 'none') return '';
   const labels = { daily: 'Daily', weekly: 'Weekly', monthly: 'Monthly', yearly: 'Yearly' };
-  return `<span class="recurrence-badge" title="Repeats ${labels[recurrence]}">&#x21BB; ${labels[recurrence]}</span>`;
+  const endLabel = recurrenceEnd ? ` until ${formatShortDate(new Date(recurrenceEnd + 'T00:00:00'))}` : '';
+  return `<span class="recurrence-badge" title="Repeats ${labels[recurrence]}${endLabel}">&#x21BB; ${labels[recurrence]}</span>`;
 }
 
 function saveEvents() {
@@ -295,7 +301,7 @@ function renderDailyObjectives(today) {
         <span class="checkmark"></span>
       </label>
       ${getPriorityIcon(e.priority)}
-      ${getRecurrenceIcon(e.recurrence)}
+      ${getRecurrenceIcon(e.recurrence, e.recurrenceEnd)}
       ${e.time ? `<span class="event-item-time">${formatTime(e.time)}</span>` : ''}
       <span class="event-item-title">${escapeHtml(e.title)}</span>
       <button class="event-item-delete" data-id="${e.id}" title="Delete">&times;</button>
@@ -367,7 +373,7 @@ function renderHorizon(today) {
           <span class="checkmark"></span>
         </label>
         ${getPriorityIcon(e.priority)}
-        ${getRecurrenceIcon(e.recurrence)}
+        ${getRecurrenceIcon(e.recurrence, e.recurrenceEnd)}
         ${e.time ? `<span class="event-item-time">${formatTime(e.time)}</span>` : ''}
         <span class="event-item-title">${escapeHtml(e.title)}</span>
         <button class="event-item-delete" data-id="${e.id}" title="Delete">&times;</button>
@@ -536,7 +542,7 @@ function renderWeekView() {
             <span class="checkmark-sm"></span>
           </label>
           ${getPriorityIcon(e.priority)}
-          ${getRecurrenceIcon(e.recurrence)}
+          ${getRecurrenceIcon(e.recurrence, e.recurrenceEnd)}
           ${e.time ? `<span class="week-event-time">${formatTime(e.time)}</span>` : ''}
           ${escapeHtml(e.title)}
         </div>`).join('')}
@@ -678,6 +684,7 @@ function addEvent(event) {
   event.completed = event.completed || false;
   event.priority = event.priority || 'medium';
   event.recurrence = event.recurrence || 'none';
+  event.recurrenceEnd = event.recurrenceEnd || null;
   event.completedDates = event.completedDates || [];
   state.events.push(event);
   saveEvents();
@@ -699,6 +706,8 @@ function openModal(dateStr) {
   els.eventCategory.value = 'objective';
   els.eventPriority.value = 'medium';
   els.eventRecurrence.value = 'none';
+  els.eventRecurrenceEnd.value = '';
+  els.recurrenceEndRow.classList.add('hidden');
   els.modalTitle.textContent = 'Add Event';
   els.modalOverlay.classList.remove('hidden');
   els.eventTitle.focus();
@@ -710,7 +719,7 @@ function closeModal() {
 
 // ===== Chat Parser =====
 function parseChat(text) {
-  const result = { title: '', date: null, time: null, category: 'objective', priority: 'medium', recurrence: 'none' };
+  const result = { title: '', date: null, time: null, category: 'objective', priority: 'medium', recurrence: 'none', recurrenceEnd: null };
   const lower = text.toLowerCase();
 
   // Detect recurrence
@@ -722,6 +731,27 @@ function parseChat(text) {
     result.recurrence = 'monthly';
   else if (lower.includes('every year') || lower.match(/\byearly\b/) || lower.match(/\bannually\b/))
     result.recurrence = 'yearly';
+
+  // Detect recurrence end: "for X weeks/days/months" or "until [date]"
+  const forWeeksMatch = lower.match(/\bfor\s+(\d+)\s+weeks?\b/);
+  const forDaysMatch = lower.match(/\bfor\s+(\d+)\s+days?\b/);
+  const forMonthsMatch = lower.match(/\bfor\s+(\d+)\s+months?\b/);
+  if (forWeeksMatch && result.recurrence !== 'none') {
+    const weeks = parseInt(forWeeksMatch[1]);
+    const end = new Date();
+    end.setDate(end.getDate() + weeks * 7);
+    result.recurrenceEnd = formatDate(end);
+  } else if (forDaysMatch && result.recurrence !== 'none') {
+    const days = parseInt(forDaysMatch[1]);
+    const end = new Date();
+    end.setDate(end.getDate() + days);
+    result.recurrenceEnd = formatDate(end);
+  } else if (forMonthsMatch && result.recurrence !== 'none') {
+    const months = parseInt(forMonthsMatch[1]);
+    const end = new Date();
+    end.setMonth(end.getMonth() + months);
+    result.recurrenceEnd = formatDate(end);
+  }
 
   // Detect category
   if (lower.includes('meeting') || lower.includes('meet with') || lower.includes('call with'))
@@ -824,6 +854,7 @@ function parseChat(text) {
   title = title.replace(/\b\d{1,2}(:\d{2})?\s*(am|pm)\b/gi, '');
   title = title.replace(/\b(urgent|important|critical|high priority|low priority|asap|not urgent|optional|whenever)\b/gi, '');
   title = title.replace(/\b(every\s+day|everyday|daily|every\s+week|weekly|every\s+month|monthly|every\s+year|yearly|annually)\b/gi, '');
+  title = title.replace(/\bfor\s+\d+\s+(weeks?|days?|months?)\b/gi, '');
   title = title.replace(/\s{2,}/g, ' ').trim();
 
   if (title) {
@@ -848,6 +879,7 @@ function handleChat(text) {
     category: parsed.category,
     priority: parsed.priority,
     recurrence: parsed.recurrence,
+    recurrenceEnd: parsed.recurrenceEnd,
     completed: false,
     completedDates: [],
   };
@@ -862,7 +894,8 @@ function handleChat(text) {
     reminder: 'reminder', personal: 'personal event'
   };
   const priorityLabel = event.priority !== 'medium' ? ` [${event.priority} priority]` : '';
-  const recurrenceLabel = event.recurrence !== 'none' ? ` (repeats ${event.recurrence})` : '';
+  const endLabel = event.recurrenceEnd ? ` until ${formatDisplay(new Date(event.recurrenceEnd + 'T00:00:00'))}` : '';
+  const recurrenceLabel = event.recurrence !== 'none' ? ` (repeats ${event.recurrence}${endLabel})` : '';
 
   const response = `Added "${event.title}" as a ${categoryLabels[event.category]} on ${dateDisplay}${timeDisplay}${priorityLabel}${recurrenceLabel}.`;
   addChatMessage(response, 'bot');
@@ -936,12 +969,23 @@ els.eventForm.addEventListener('submit', (e) => {
     category: els.eventCategory.value,
     priority: els.eventPriority.value,
     recurrence: els.eventRecurrence.value,
+    recurrenceEnd: els.eventRecurrenceEnd.value || null,
     completed: false,
     completedDates: [],
   };
   if (event.title) {
     addEvent(event);
     closeModal();
+  }
+});
+
+// Show/hide recurrence end date when recurrence changes
+els.eventRecurrence.addEventListener('change', () => {
+  if (els.eventRecurrence.value !== 'none') {
+    els.recurrenceEndRow.classList.remove('hidden');
+  } else {
+    els.recurrenceEndRow.classList.add('hidden');
+    els.eventRecurrenceEnd.value = '';
   }
 });
 

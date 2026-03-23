@@ -898,6 +898,15 @@ body {
   border-color: var(--primary);
 }
 
+.recurrence-end-row {
+  overflow: hidden;
+  transition: all 0.2s ease;
+}
+
+.recurrence-end-row.hidden {
+  display: none;
+}
+
 .modal-actions {
   display: flex;
   justify-content: flex-end;
