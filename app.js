@@ -230,9 +230,27 @@ function getRecurrenceIcon(recurrence, recurrenceEnd) {
   return `<span class="recurrence-badge" title="Repeats ${labels[recurrence]}${endLabel}">&#x21BB; ${labels[recurrence]}</span>`;
 }
 
+let _syncTimer = null;
 async function saveEvents() {
-  // Also keep localStorage as offline fallback
+  // Always keep localStorage as offline fallback (instant)
   localStorage.setItem('calendarEvents', JSON.stringify(state.events));
+
+  // Debounce Supabase sync to avoid excessive calls
+  if (_syncTimer) clearTimeout(_syncTimer);
+  _syncTimer = setTimeout(() => _syncToSupabase(), 500);
+}
+
+async function _syncToSupabase() {
+  if (!state.user) return;
+  try {
+    const rows = state.events.map(e => eventToRow(e));
+    if (rows.length > 0) {
+      const { error } = await db.from('calendar_events').upsert(rows);
+      if (error) console.error('Supabase sync error:', error.message);
+    }
+  } catch (err) {
+    console.error('Supabase sync failed (offline?):', err.message);
+  }
 }
 
 async function saveStreaks() {
