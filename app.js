@@ -709,8 +709,8 @@ function renderMonthView() {
   // Add click + drag handlers
   els.calendarDays.querySelectorAll('.calendar-day').forEach(cell => {
     cell.addEventListener('click', (e) => {
-      // Don't open modal if clicking on a checkbox
-      if (e.target.classList.contains('task-checkbox') || e.target.classList.contains('checkmark')) return;
+      // Don't open modal if clicking on a checkbox or delete button
+      if (e.target.classList.contains('task-checkbox') || e.target.classList.contains('checkmark') || e.target.classList.contains('day-event-delete')) return;
       state.selectedDate = new Date(cell.dataset.date + 'T00:00:00');
       openModal(cell.dataset.date);
     });
@@ -755,6 +755,14 @@ function renderMonthView() {
       toggleEventComplete(cb.dataset.id, cb.dataset.date);
     });
   });
+
+  // Delete buttons in month view
+  els.calendarDays.querySelectorAll('.day-event-delete').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      deleteEvent(btn.dataset.id);
+    });
+  });
 }
 
 function buildDayCell(date, events, otherMonth, isToday) {
@@ -780,6 +788,7 @@ function buildDayCell(date, events, otherMonth, isToday) {
         <span class="checkmark-mini"></span>
       </label>
       ${e.recurrence && e.recurrence !== 'none' ? '<span class="recurrence-dot" title="Recurring">&#x21BB;</span>' : ''}${e.time ? formatTime(e.time) + ' ' : ''}${escapeHtml(e.title)}
+      <button class="day-event-delete" data-id="${e.id}" title="Delete">&times;</button>
     </div>`;
   });
   if (events.length > maxShow) {
@@ -827,6 +836,7 @@ function renderWeekView() {
           ${getRecurrenceIcon(e.recurrence, e.recurrenceEnd)}
           ${e.time ? `<span class="week-event-time">${formatTimeRange(e.time, e.endTime)}</span>` : ''}
           ${escapeHtml(e.title)}
+          <button class="day-event-delete" data-id="${e.id}" title="Delete">&times;</button>
         </div>`).join('')}
       </div>
     </div>`;
@@ -836,7 +846,7 @@ function renderWeekView() {
 
   els.weekGrid.querySelectorAll('.week-day-row').forEach(row => {
     row.addEventListener('click', (e) => {
-      if (e.target.classList.contains('task-checkbox') || e.target.classList.contains('checkmark-sm')) return;
+      if (e.target.classList.contains('task-checkbox') || e.target.classList.contains('checkmark-sm') || e.target.classList.contains('day-event-delete')) return;
       openModal(row.dataset.date);
     });
 
@@ -878,6 +888,14 @@ function renderWeekView() {
     cb.addEventListener('change', (e) => {
       e.stopPropagation();
       toggleEventComplete(cb.dataset.id, cb.dataset.date);
+    });
+  });
+
+  // Week view delete buttons
+  els.weekGrid.querySelectorAll('.day-event-delete').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      deleteEvent(btn.dataset.id);
     });
   });
 }
