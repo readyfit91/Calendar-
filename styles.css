@@ -601,89 +601,46 @@ body {
   text-transform: uppercase;
 }
 
-/* ===== Birthday Countdown ===== */
-.birthday-section {
-  margin-top: 24px;
-  padding-top: 16px;
-  border-top: 1px solid var(--border);
-}
-
-.birthday-heading {
-  font-size: 1rem;
-  font-weight: 600;
-  margin-bottom: 12px;
-  color: var(--text);
-}
-
-.birthday-list {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.birthday-list .empty-state {
-  font-size: 0.8rem;
-  color: var(--text-muted);
-  font-style: italic;
-}
-
-.birthday-card {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
-  background: var(--surface-2);
-  border-radius: var(--radius);
-  border-left: 3px solid var(--accent-purple);
-  transition: background 0.15s;
-}
-
-.birthday-card:hover {
-  background: var(--border);
-}
-
-.birthday-card.birthday-today {
-  border-left-color: var(--accent-green);
-  background: rgba(34, 197, 94, 0.1);
-}
-
-.birthday-card.birthday-soon {
-  border-left-color: var(--accent-orange);
-}
-
-.birthday-icon {
-  font-size: 1.2rem;
-  flex-shrink: 0;
-}
-
-.birthday-info {
-  flex: 1;
-  min-width: 0;
-}
-
-.birthday-name {
+/* ===== Birthday Marquee Banner ===== */
+.birthday-marquee {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: linear-gradient(90deg, var(--accent-purple), #7c3aed, var(--accent-purple));
+  color: #fff;
+  overflow: hidden;
+  white-space: nowrap;
+  padding: 6px 0;
   font-size: 0.82rem;
   font-weight: 500;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.25);
 }
 
-.birthday-date {
-  font-size: 0.7rem;
-  color: var(--text-muted);
+.birthday-marquee-track {
+  display: inline-block;
+  animation: marquee-scroll 20s linear infinite;
+  padding-left: 100%;
 }
 
-.birthday-countdown {
-  font-size: 0.7rem;
+.marquee-item {
+  display: inline-block;
+  padding: 0 32px;
+  letter-spacing: 0.02em;
+}
+
+.marquee-item.marquee-today {
+  color: #fbbf24;
   font-weight: 700;
-  white-space: nowrap;
-  color: var(--accent-orange);
-  flex-shrink: 0;
 }
 
-.birthday-today .birthday-countdown {
-  color: var(--accent-green);
+@keyframes marquee-scroll {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+/* Pause on hover so users can read */
+.birthday-marquee:hover .birthday-marquee-track {
+  animation-play-state: paused;
 }
 
 /* ===== Calendar Container ===== */
@@ -1937,20 +1894,6 @@ body {
 
   .focus-task-title {
     font-size: 0.85rem;
-  }
-
-  /* Birthday cards compact */
-  .birthday-card {
-    padding: 8px 10px;
-    gap: 8px;
-  }
-
-  .birthday-name {
-    font-size: 0.78rem;
-  }
-
-  .birthday-icon {
-    font-size: 1rem;
   }
 
   /* Auth */
