@@ -1418,36 +1418,460 @@ body {
 ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
 
 /* ===== Responsive ===== */
+
+/* iPad landscape & smaller desktops */
 @media (max-width: 1100px) {
   .sidebar { width: 220px; min-width: 220px; }
   .header-right { gap: 10px; }
   .progress-track { width: 80px; }
 }
 
+/* iPad portrait */
 @media (max-width: 900px) {
+  .app {
+    height: auto;
+    min-height: 100vh;
+    overflow: visible;
+  }
+
   .main-layout {
     flex-direction: column;
+    overflow: visible;
   }
+
   .sidebar {
     width: 100%;
     min-width: unset;
-    max-height: 200px;
+    max-height: none;
     border-right: none !important;
     border-left: none !important;
     border-bottom: 1px solid var(--border);
   }
+
   .sidebar:last-child {
     border-bottom: none;
     border-top: 1px solid var(--border);
   }
+
   .header {
     flex-wrap: wrap;
+    padding: 10px 16px;
   }
+
   .header-right {
     flex-wrap: wrap;
     gap: 8px;
   }
+
+  .calendar-container {
+    padding: 16px;
+    overflow: visible;
+  }
+
+  .chatbox {
+    height: auto;
+    min-height: 140px;
+  }
+
+  .chat-messages {
+    max-height: 200px;
+  }
+}
+
+/* iPhone / small mobile */
+@media (max-width: 600px) {
+  .app {
+    height: auto;
+    min-height: 100vh;
+    min-height: 100dvh;
+    overflow: visible;
+  }
+
+  /* Header: stack vertically */
+  .header {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 10px 12px;
+    gap: 8px;
+  }
+
+  .header > h1 {
+    font-size: 1.2rem;
+    text-align: center;
+  }
+
+  .header-right {
+    display: grid;
+    grid-template-columns: 1fr auto auto;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .progress-container {
+    grid-column: 1 / -1;
+    order: 10;
+  }
+
+  .progress-track { width: 100%; }
+
   .streak-display {
+    order: 1;
+  }
+
+  .current-date {
+    font-size: 0.75rem;
+    order: 0;
+    grid-column: 1 / -1;
+    text-align: center;
+  }
+
+  .focus-btn {
+    padding: 6px 10px;
+    font-size: 0.75rem;
+    order: 2;
+  }
+
+  .focus-btn svg {
+    width: 14px;
+    height: 14px;
+  }
+
+  .signout-btn {
+    width: 28px;
+    height: 28px;
     order: 3;
+  }
+
+  /* Main layout: single column, scrollable */
+  .main-layout {
+    flex-direction: column;
+    overflow: visible;
+  }
+
+  .sidebar {
+    width: 100%;
+    min-width: unset;
+    max-height: none;
+    padding: 12px;
+    border-right: none !important;
+    border-left: none !important;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .sidebar:last-child {
+    border-bottom: none;
+    border-top: 1px solid var(--border);
+  }
+
+  .sidebar h2 {
+    font-size: 0.9rem;
+  }
+
+  .objectives-list li, .horizon-list li {
+    padding: 8px 10px;
+    font-size: 0.8rem;
+  }
+
+  /* Calendar */
+  .calendar-container {
+    padding: 10px;
+    overflow: visible;
+  }
+
+  .view-tabs {
+    margin-bottom: 10px;
+  }
+
+  .tab {
+    padding: 6px 14px;
+    font-size: 0.8rem;
+  }
+
+  .calendar-nav {
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+
+  .calendar-nav h3 {
+    font-size: 0.95rem;
+    min-width: 140px;
+  }
+
+  .calendar-nav button {
+    width: 32px;
+    height: 32px;
+    font-size: 0.9rem;
+  }
+
+  /* Month grid: compact cells */
+  .day-header {
+    padding: 4px 2px;
+    font-size: 0.6rem;
+  }
+
+  .calendar-day {
+    min-height: 52px;
+    padding: 4px;
+  }
+
+  .day-number {
+    font-size: 0.7rem;
+  }
+
+  .day-events {
+    gap: 1px;
+  }
+
+  .day-event {
+    font-size: 0.5rem;
+    padding: 1px 2px;
+    gap: 1px;
+  }
+
+  .day-event .checkbox-mini {
+    display: none;
+  }
+
+  .day-event-more {
+    font-size: 0.5rem;
+  }
+
+  /* Week view: stack label above events */
+  .week-day-row {
+    flex-direction: column;
+    min-height: auto;
+  }
+
+  .week-day-label {
+    min-width: unset;
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .week-day-name {
+    font-size: 0.7rem;
+  }
+
+  .week-day-date {
+    font-size: 1rem;
+  }
+
+  .week-day-events {
+    padding: 8px 10px;
+    gap: 4px;
+  }
+
+  .week-event {
+    font-size: 0.75rem;
+    padding: 4px 8px;
+  }
+
+  /* Chat: fixed to bottom, more compact */
+  .chatbox {
+    height: auto;
+    min-height: 100px;
+  }
+
+  .chat-messages {
+    padding: 8px 12px;
+    max-height: 120px;
+    gap: 6px;
+  }
+
+  .chat-message {
+    padding: 6px 10px;
+    font-size: 0.8rem;
+    max-width: 90%;
+  }
+
+  .chat-input-area {
+    padding: 8px 12px;
+    gap: 6px;
+  }
+
+  #chatInput {
+    padding: 8px 12px;
+    font-size: 0.85rem;
+  }
+
+  #chatSend {
+    padding: 8px 16px;
+    font-size: 0.8rem;
+  }
+
+  /* Modal: full width on mobile */
+  .modal {
+    width: 95vw;
+    padding: 18px;
+    border-radius: 10px;
+    max-height: 85vh;
+    overflow-y: auto;
+  }
+
+  .conflict-modal {
+    max-width: 95vw;
+  }
+
+  .conflict-actions {
+    flex-wrap: wrap;
+  }
+
+  .conflict-actions button {
+    flex: 1;
+    min-width: 80px;
+    padding: 10px 8px;
+    font-size: 0.75rem;
+  }
+
+  /* Focus mode */
+  .focus-panel {
+    width: 95vw;
+    max-width: 95vw;
+    padding: 20px;
+    border-radius: 12px;
+    max-height: 90vh;
+  }
+
+  .focus-header h2 {
+    font-size: 1.1rem;
+  }
+
+  .focus-task {
+    padding: 10px 12px;
+    gap: 10px;
+  }
+
+  .focus-task-title {
+    font-size: 0.85rem;
+  }
+
+  /* Birthday cards compact */
+  .birthday-card {
+    padding: 8px 10px;
+    gap: 8px;
+  }
+
+  .birthday-name {
+    font-size: 0.78rem;
+  }
+
+  .birthday-icon {
+    font-size: 1rem;
+  }
+
+  /* Auth */
+  .auth-card {
+    padding: 24px 20px;
+    border-radius: 12px;
+  }
+
+  .auth-title {
+    font-size: 1.5rem;
+  }
+}
+
+/* Very small phones (iPhone SE, etc.) */
+@media (max-width: 375px) {
+  .header > h1 {
+    font-size: 1.05rem;
+  }
+
+  .calendar-day {
+    min-height: 44px;
+    padding: 3px;
+  }
+
+  .day-number {
+    font-size: 0.65rem;
+  }
+
+  .day-event {
+    font-size: 0.45rem;
+    padding: 1px;
+  }
+
+  .calendar-nav h3 {
+    font-size: 0.85rem;
+    min-width: 120px;
+  }
+
+  .streak-display {
+    gap: 6px;
+  }
+
+  .streak-flame {
+    font-size: 0.8rem;
+  }
+
+  .streak-best {
+    font-size: 0.6rem;
+  }
+}
+
+/* Safe area insets for notched iPhones */
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  .chatbox {
+    padding-bottom: calc(8px + env(safe-area-inset-bottom));
+  }
+
+  .chat-input-area {
+    padding-bottom: calc(8px + env(safe-area-inset-bottom));
+  }
+
+  .header {
+    padding-top: calc(10px + env(safe-area-inset-top));
+  }
+}
+
+/* Touch-friendly: bigger tap targets on touch devices */
+@media (hover: none) and (pointer: coarse) {
+  .calendar-day {
+    min-height: 56px;
+  }
+
+  .event-item-delete {
+    opacity: 1;
+    padding: 4px 8px;
+    font-size: 1.2rem;
+  }
+
+  .tab {
+    padding: 8px 18px;
+  }
+
+  .calendar-nav button {
+    width: 40px;
+    height: 40px;
+  }
+
+  .checkmark {
+    width: 22px;
+    height: 22px;
+  }
+
+  .checkmark-sm {
+    width: 18px;
+    height: 18px;
+  }
+
+  .checkbox-mini, .checkmark-mini {
+    width: 14px;
+    height: 14px;
+  }
+
+  #chatInput {
+    font-size: 16px; /* prevents iOS zoom on focus */
+  }
+
+  .auth-card input {
+    font-size: 16px; /* prevents iOS zoom on focus */
+  }
+
+  .modal input, .modal select {
+    font-size: 16px; /* prevents iOS zoom on focus */
   }
 }
