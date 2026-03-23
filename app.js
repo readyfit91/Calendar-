@@ -114,6 +114,66 @@ function formatTime(t) {
   return `${hr % 12 || 12}:${m} ${ampm}`;
 }
 
+function formatTimeRange(time, endTime) {
+  if (!time) return '';
+  if (!endTime) return formatTime(time);
+  return `${formatTime(time)} – ${formatTime(endTime)}`;
+}
+
+// Parse a single time token like "3:00", "300pm", "3am", "3pm", "15:00", "3:00pm"
+function parseTimeToken(str) {
+  if (!str) return null;
+  str = str.trim();
+
+  // "3:00pm", "3:00 pm", "12:30am"
+  let m = str.match(/^(\d{1,2}):(\d{2})\s*(am|pm)?$/i);
+  if (m) {
+    let h = parseInt(m[1]);
+    const min = parseInt(m[2]);
+    const ap = (m[3] || '').toLowerCase();
+    if (ap === 'pm' && h < 12) h += 12;
+    if (ap === 'am' && h === 12) h = 0;
+    if (h > 23 || min > 59) return null;
+    return `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`;
+  }
+
+  // "300pm", "1200am", "100pm" (no colon, with am/pm)
+  m = str.match(/^(\d{3,4})\s*(am|pm)$/i);
+  if (m) {
+    const num = m[1];
+    const ap = m[2].toLowerCase();
+    let h, min;
+    if (num.length === 3) { h = parseInt(num[0]); min = parseInt(num.slice(1)); }
+    else { h = parseInt(num.slice(0, 2)); min = parseInt(num.slice(2)); }
+    if (ap === 'pm' && h < 12) h += 12;
+    if (ap === 'am' && h === 12) h = 0;
+    if (h > 23 || min > 59) return null;
+    return `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`;
+  }
+
+  // "3pm", "3am", "12pm"
+  m = str.match(/^(\d{1,2})\s*(am|pm)$/i);
+  if (m) {
+    let h = parseInt(m[1]);
+    const ap = m[2].toLowerCase();
+    if (ap === 'pm' && h < 12) h += 12;
+    if (ap === 'am' && h === 12) h = 0;
+    if (h > 23) return null;
+    return `${String(h).padStart(2, '0')}:00`;
+  }
+
+  // "3:00", "15:00" (24hr, no am/pm)
+  m = str.match(/^(\d{1,2}):(\d{2})$/);
+  if (m) {
+    const h = parseInt(m[1]);
+    const min = parseInt(m[2]);
+    if (h > 23 || min > 59) return null;
+    return `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`;
+  }
+
+  return null;
+}
+
 function sameDay(d1, d2) {
   return d1.getFullYear() === d2.getFullYear() &&
     d1.getMonth() === d2.getMonth() &&
@@ -203,6 +263,7 @@ function eventToRow(event) {
     title: event.title,
     date: event.date,
     time: event.time || null,
+    end_time: event.endTime || null,
     category: event.category || 'objective',
     priority: event.priority || 'medium',
     recurrence: event.recurrence || 'none',
@@ -219,6 +280,7 @@ function rowToEvent(row) {
     title: row.title,
     date: row.date,
     time: row.time,
+    endTime: row.end_time || null,
     category: row.category,
     priority: row.priority,
     recurrence: row.recurrence,
@@ -446,7 +508,7 @@ function renderDailyObjectives(today) {
       </label>
       ${getPriorityIcon(e.priority)}
       ${getRecurrenceIcon(e.recurrence, e.recurrenceEnd)}
-      ${e.time ? `<span class="event-item-time">${formatTime(e.time)}</span>` : ''}
+      ${e.time ? `<span class="event-item-time">${formatTimeRange(e.time, e.endTime)}</span>` : ''}
       <span class="event-item-title">${escapeHtml(e.title)}</span>
       <button class="event-item-delete" data-id="${e.id}" title="Delete">&times;</button>
     </li>
@@ -518,7 +580,7 @@ function renderHorizon(today) {
         </label>
         ${getPriorityIcon(e.priority)}
         ${getRecurrenceIcon(e.recurrence, e.recurrenceEnd)}
-        ${e.time ? `<span class="event-item-time">${formatTime(e.time)}</span>` : ''}
+        ${e.time ? `<span class="event-item-time">${formatTimeRange(e.time, e.endTime)}</span>` : ''}
         <span class="event-item-title">${escapeHtml(e.title)}</span>
         <button class="event-item-delete" data-id="${e.id}" title="Delete">&times;</button>
       </li>`;
@@ -749,7 +811,7 @@ function renderWeekView() {
           </label>
           ${getPriorityIcon(e.priority)}
           ${getRecurrenceIcon(e.recurrence, e.recurrenceEnd)}
-          ${e.time ? `<span class="week-event-time">${formatTime(e.time)}</span>` : ''}
+          ${e.time ? `<span class="week-event-time">${formatTimeRange(e.time, e.endTime)}</span>` : ''}
           ${escapeHtml(e.title)}
         </div>`).join('')}
       </div>
@@ -873,7 +935,7 @@ function renderFocusMode() {
         <div class="focus-task-meta">
           <span class="cat-badge cat-${e.category}">${e.category}</span>
           ${e.recurrence && e.recurrence !== 'none' ? `<span class="recurrence-badge">&#x21BB; ${e.recurrence}</span>` : ''}
-          ${e.time ? `<span class="focus-task-time">${formatTime(e.time)}</span>` : ''}
+          ${e.time ? `<span class="focus-task-time">${formatTimeRange(e.time, e.endTime)}</span>` : ''}
         </div>
       </div>
     </div>
@@ -908,7 +970,7 @@ function showConflictDialog(newEvent, existing) {
   els.conflictExisting.innerHTML = existing.map(e => `
     <div class="conflict-event-item cat-${e.category}">
       ${getPriorityIcon(e.priority)}
-      ${e.time ? `<span class="conflict-event-time">${formatTime(e.time)}</span>` : ''}
+      ${e.time ? `<span class="conflict-event-time">${formatTimeRange(e.time, e.endTime)}</span>` : ''}
       <span class="conflict-event-title">${escapeHtml(e.title)}</span>
       <span class="conflict-event-cat">${e.category}</span>
     </div>
@@ -938,7 +1000,7 @@ function commitAddEvent(event, source) {
   if (source === 'chat') {
     const dateObj = new Date(event.date + 'T00:00:00');
     const dateDisplay = formatDisplay(dateObj);
-    const timeDisplay = event.time ? ` at ${formatTime(event.time)}` : '';
+    const timeDisplay = event.time ? ` at ${formatTimeRange(event.time, event.endTime)}` : '';
     const categoryLabels = {
       objective: 'objective', meeting: 'meeting', deadline: 'deadline',
       reminder: 'reminder', personal: 'personal event'
@@ -956,6 +1018,7 @@ function commitAddEvent(event, source) {
 // ===== Events CRUD =====
 function addEvent(event) {
   event.completed = event.completed || false;
+  event.endTime = event.endTime || null;
   event.priority = event.priority || 'medium';
   event.recurrence = event.recurrence || 'none';
   event.recurrenceEnd = event.recurrenceEnd || null;
@@ -1028,27 +1091,52 @@ function parseChat(text) {
   else if (lower.includes('low priority') || lower.includes('whenever') || lower.includes('not urgent') || lower.includes('optional'))
     result.priority = 'low';
 
-  // Parse time
-  const timePatterns = [
-    /\bat\s+(\d{1,2}):(\d{2})\s*(am|pm)/i,
-    /\bat\s+(\d{1,2})\s*(am|pm)/i,
-    /\b(\d{1,2}):(\d{2})\s*(am|pm)/i,
-    /\b(\d{1,2})\s*(am|pm)\b/i,
-  ];
+  // Parse time — supports ranges (4-5pm, 4:00-5:00pm, 4pm-5am) and singles (3:00, 300pm, 3am)
+  result.endTime = null;
 
-  for (const pattern of timePatterns) {
-    const match = text.match(pattern);
-    if (match) {
-      let hours = parseInt(match[1]);
-      const minutes = match[2] && !isNaN(parseInt(match[2])) && match[2].length <= 2 && parseInt(match[2]) < 60
-        ? match[2] : '00';
-      const ampm = (match[3] || match[2] || '').toLowerCase();
+  // Time range patterns: "4-5pm", "4pm-5pm", "4:00-5:00", "400-500pm", "4:00pm-5:30am", etc.
+  const rangeMatch = text.match(/\b(?:at\s+)?(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)\s*[-–—to]+\s*(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)\b(?!\s*\/)/i);
+  if (rangeMatch) {
+    let startStr = rangeMatch[1].trim();
+    let endStr = rangeMatch[2].trim();
 
-      if (ampm === 'pm' && hours < 12) hours += 12;
-      if (ampm === 'am' && hours === 12) hours = 0;
+    // If only the end has am/pm, apply it to start too: "4-5pm" → "4pm", "5pm"
+    const startHasAmPm = /am|pm/i.test(startStr);
+    const endHasAmPm = /am|pm/i.test(endStr);
+    if (!startHasAmPm && endHasAmPm) {
+      const suffix = endStr.match(/am|pm/i)[0];
+      startStr = startStr + suffix;
+    }
 
-      result.time = `${String(hours).padStart(2, '0')}:${String(parseInt(minutes)).padStart(2, '0')}`;
-      break;
+    const startTime = parseTimeToken(startStr);
+    const endTime = parseTimeToken(endStr);
+    if (startTime) {
+      result.time = startTime;
+      if (endTime) result.endTime = endTime;
+    }
+  }
+
+  // Single time patterns (only if range didn't match)
+  if (!result.time) {
+    const singlePatterns = [
+      /\bat\s+(\d{1,2}:\d{2}\s*(?:am|pm)?)/i,
+      /\bat\s+(\d{3,4}\s*(?:am|pm))/i,
+      /\bat\s+(\d{1,2}\s*(?:am|pm))/i,
+      /\b(\d{1,2}:\d{2}\s*(?:am|pm))/i,
+      /\b(\d{3,4}\s*(?:am|pm))/i,
+      /\b(\d{1,2}\s*(?:am|pm))\b/i,
+      /\bat\s+(\d{1,2}:\d{2})\b/i,
+    ];
+
+    for (const pattern of singlePatterns) {
+      const match = text.match(pattern);
+      if (match) {
+        const parsed = parseTimeToken(match[1]);
+        if (parsed) {
+          result.time = parsed;
+          break;
+        }
+      }
     }
   }
 
@@ -1187,8 +1275,14 @@ function parseChat(text) {
   title = title.replace(/\b(on|at|by|for|next|this)\s+(sunday|monday|tuesday|wednesday|thursday|friday|saturday)/gi, '');
   title = title.replace(/\b(today|tomorrow)\b/gi, '');
   title = title.replace(monthPattern, '');
+  // Strip date ranges: "04/01-05/01", "4/1/2026-5/1/2026"
+  title = title.replace(/\b\d{1,2}\/\d{1,2}(\/\d{2,4})?\s*[-–—to]+\s*\d{1,2}\/\d{1,2}(\/\d{2,4})?\b/g, '');
   title = title.replace(/\b\d{1,2}\/\d{1,2}(\/\d{2,4})?\b/, '');
-  title = title.replace(/\bat\s+\d{1,2}(:\d{2})?\s*(am|pm)?\b/gi, '');
+  // Strip time ranges: "4-5pm", "4pm-5pm", "4:00-5:00pm", "400-500pm", etc.
+  title = title.replace(/\b(?:at\s+)?\d{1,4}(?::\d{2})?\s*(?:am|pm)?\s*[-–—to]+\s*\d{1,4}(?::\d{2})?\s*(?:am|pm)?\b/gi, '');
+  // Strip single times: "at 3:00pm", "3pm", "300pm", "at 3:00", "3:00am"
+  title = title.replace(/\bat\s+\d{1,4}(:\d{2})?\s*(am|pm)?\b/gi, '');
+  title = title.replace(/\b\d{3,4}\s*(am|pm)\b/gi, '');
   title = title.replace(/\b\d{1,2}(:\d{2})?\s*(am|pm)\b/gi, '');
   title = title.replace(/\b(urgent|important|critical|high priority|low priority|asap|not urgent|optional|whenever)\b/gi, '');
   title = title.replace(/\b(every\s+day|everyday|daily|every\s+week|weekly|every\s+month|monthly|every\s+year|yearly|annually)\b/gi, '');
@@ -1506,7 +1600,7 @@ function getQueryCategoryIcons() {
 
 function renderQueryEventCard(e, categoryIcons) {
   const icon = categoryIcons[e.category] || categoryIcons.objective;
-  const timeStr = e.time ? formatTime(e.time) : '';
+  const timeStr = e.time ? formatTimeRange(e.time, e.endTime) : '';
   const priClass = e.priority === 'high' ? 'pri-high' : e.priority === 'low' ? 'pri-low' : '';
   const doneClass = e.completed ? ' done' : '';
   const recurBadge = e.recurrence && e.recurrence !== 'none'
@@ -1634,6 +1728,7 @@ function handleChat(text) {
     title: parsed.title,
     date: parsed.date,
     time: parsed.time,
+    endTime: parsed.endTime || null,
     category: parsed.category,
     priority: parsed.priority,
     recurrence: parsed.recurrence,
@@ -1743,6 +1838,7 @@ els.eventForm.addEventListener('submit', (e) => {
     title: els.eventTitle.value.trim(),
     date: els.eventDate.value,
     time: els.eventTime.value || null,
+    endTime: null,
     category: els.eventCategory.value,
     priority: els.eventPriority.value,
     recurrence: els.eventRecurrence.value,
@@ -1934,6 +2030,7 @@ async function initApp(user) {
     state.events = JSON.parse(localStorage.getItem('calendarEvents') || '[]').map(ev => ({
       ...ev,
       completed: ev.completed || false,
+      endTime: ev.endTime || null,
       priority: ev.priority || 'medium',
       recurrence: ev.recurrence || 'none',
       recurrenceEnd: ev.recurrenceEnd || null,
