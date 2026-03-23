@@ -1119,21 +1119,57 @@ function parseChat(text) {
 function tryHandleQuery(text) {
   const lower = text.toLowerCase().trim();
 
-  // Detect query patterns
+  // Detect query patterns — broad coverage of natural phrasing
   const queryPatterns = [
-    /what(.{0,20})(planned|scheduled|happening|going on|coming up|on the calendar)/i,
+    // "what" questions
+    /what(.{0,20})(planned|scheduled|happening|going on|coming up|on the calendar|on the schedule|on the agenda|lined up)/i,
     /what do (we|i|you) have/i,
-    /do (we|i) have (anything|something|any ?thing)/i,
-    /show (me )?(my |our )?(events?|schedule|plans?|calendar)/i,
-    /anything (planned|scheduled|on|happening)/i,
+    /what (are|is) (on|for|happening)/i,
+    /what('s| is) (planned|scheduled|happening|coming up|going on|lined up)/i,
     /what('s| is) (on|for)/i,
+    /what events/i,
+    /what am i doing/i,
+    /what are we doing/i,
+    // "do we/I have" questions
+    /do (we|i) have (anything|something|any ?thing|plans?|events?)/i,
+    /have (we|i) got (anything|something|any ?thing)/i,
+    // "is/are there" questions
+    /is (there )?(anything|something|any ?thing) (on|planned|scheduled|happening|set|booked)/i,
+    /are (we|there)(.{0,15})(planned|scheduled|free|busy|booked|available|open)/i,
+    /are there (any )?(events?|plans?|meetings?|tasks?)/i,
+    // "show/check/tell/give" commands
+    /show (me )?(my |our |the )?(events?|schedule|plans?|calendar|agenda|tasks?|day)/i,
+    /check (my |our |the )?(schedule|calendar|plans?|events?|agenda|day)/i,
+    /tell me (about )?(my |our |the )?(schedule|plans?|events?|day)/i,
+    /give me (my |our |the )?(schedule|plans?|events?|rundown|breakdown)/i,
+    /pull up (my |our |the )?(schedule|calendar|plans?|events?|day)/i,
+    // "anything" questions
+    /anything (planned|scheduled|on|happening|going on|coming up|set|booked|lined up)/i,
+    /something (planned|scheduled|on|happening)/i,
+    // schedule/plan/agenda phrases
     /plans? for/i,
     /schedule for/i,
-    /how('s| does)? (my|our|the) (day|week|month) look/i,
-    /read (back|me)/i,
-    /what('s| is) (planned|scheduled|happening)/i,
-    /is (there )?(anything|something|any ?thing) (on|planned|scheduled|happening)/i,
-    /are (we|there) .{0,10}(planned|scheduled|free|busy|booked)/i,
+    /agenda for/i,
+    /calendar for/i,
+    // "how does my day look" style
+    /how('s| does| is| do)? (my|our|the) (day|week|month|schedule|calendar) look/i,
+    /how('s| is) (my|our|the) (day|week|month)/i,
+    // "am I / are we free/busy"
+    /am i (free|busy|available|booked|open)/i,
+    /are we (free|busy|available|booked|open)/i,
+    // read back / recap
+    /read (back|me|out)/i,
+    /recap (my |our |the )?(day|schedule|plans?)/i,
+    /run ?down (of |for )?(my |our |the )?(day|schedule|plans?)/i,
+    /summary (of |for )?(my |our |the )?(day|schedule|plans?)/i,
+    // "got anything" / "got plans"
+    /(we |i )?(got|have) (anything|something|plans?|events?) (on|for|planned|scheduled|happening)/i,
+    // "busy on" / "free on"
+    /(busy|free|available|open|booked) (on|for)/i,
+    // "look up" / "look at"
+    /look (up|at) (my |our |the )?(schedule|calendar|plans?|events?|day)/i,
+    // simple date-only queries that start with question words
+    /^(what|anything|is there|do we|do i|are we|how).{0,50}(today|tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday|\d{1,2}\/\d{1,2})/i,
   ];
 
   const isQuery = queryPatterns.some(p => p.test(lower));
