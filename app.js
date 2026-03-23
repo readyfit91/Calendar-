@@ -9,11 +9,13 @@ const state = {
   streaks: JSON.parse(localStorage.getItem('calendarStreaks') || '{"current":0,"best":0,"lastCompletedDate":null}'),
 };
 
-// Migrate old events without completed/priority fields
+// Migrate old events without completed/priority/recurrence fields
 state.events = state.events.map(e => ({
   ...e,
   completed: e.completed || false,
   priority: e.priority || 'medium',
+  recurrence: e.recurrence || 'none',
+  completedDates: e.completedDates || [],
 }));
 saveEvents();
 
@@ -46,6 +48,7 @@ const els = {
   eventTime: $('#eventTime'),
   eventCategory: $('#eventCategory'),
   eventPriority: $('#eventPriority'),
+  eventRecurrence: $('#eventRecurrence'),
   modalCancel: $('#modalCancel'),
   modalTitle: $('#modalTitle'),
   progressBar: $('#progressBar'),
@@ -94,8 +97,58 @@ function sameDay(d1, d2) {
 }
 
 function getEventsForDate(dateStr) {
-  return state.events.filter(e => e.date === dateStr)
-    .sort((a, b) => (a.time || '').localeCompare(b.time || ''));
+  const results = [];
+  const targetDate = new Date(dateStr + 'T00:00:00');
+
+  state.events.forEach(e => {
+    if (e.recurrence === 'none' || !e.recurrence) {
+      // Non-recurring: simple match
+      if (e.date === dateStr) results.push(e);
+    } else {
+      // Recurring: check if this date matches the pattern
+      if (doesRecurrenceMatch(e, dateStr, targetDate)) {
+        // Create a virtual instance for this date
+        results.push({
+          ...e,
+          _virtualDate: dateStr,
+          _isRecurringInstance: true,
+          completed: (e.completedDates || []).includes(dateStr),
+        });
+      }
+    }
+  });
+
+  return results.sort((a, b) => (a.time || '').localeCompare(b.time || ''));
+}
+
+function doesRecurrenceMatch(event, dateStr, targetDate) {
+  const startDate = new Date(event.date + 'T00:00:00');
+  // Don't show instances before the start date
+  if (dateStr < event.date) return false;
+  // Original date always matches
+  if (dateStr === event.date) return true;
+
+  const diffTime = targetDate.getTime() - startDate.getTime();
+  const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+
+  switch (event.recurrence) {
+    case 'daily':
+      return diffDays >= 0;
+    case 'weekly':
+      return diffDays >= 0 && targetDate.getDay() === startDate.getDay();
+    case 'monthly':
+      return diffDays >= 0 && targetDate.getDate() === startDate.getDate();
+    case 'yearly':
+      return diffDays >= 0 && targetDate.getMonth() === startDate.getMonth() && targetDate.getDate() === startDate.getDate();
+    default:
+      return false;
+  }
+}
+
+function getRecurrenceIcon(recurrence) {
+  if (!recurrence || recurrence === 'none') return '';
+  const labels = { daily: 'Daily', weekly: 'Weekly', monthly: 'Monthly', yearly: 'Yearly' };
+  return `<span class="recurrence-badge" title="Repeats ${labels[recurrence]}">&#x21BB; ${labels[recurrence]}</span>`;
 }
 
 function saveEvents() {
@@ -180,16 +233,29 @@ function updateStreaks() {
 }
 
 // ===== Toggle Event Completion =====
-function toggleEventComplete(id) {
+function toggleEventComplete(id, dateStr) {
   const event = state.events.find(e => e.id === id);
-  if (event) {
+  if (!event) return;
+
+  if (event.recurrence && event.recurrence !== 'none') {
+    // For recurring events, track completion per-date
+    const targetDate = dateStr || formatDate(new Date());
+    if (!event.completedDates) event.completedDates = [];
+    const idx = event.completedDates.indexOf(targetDate);
+    if (idx >= 0) {
+      event.completedDates.splice(idx, 1);
+    } else {
+      event.completedDates.push(targetDate);
+    }
+  } else {
     event.completed = !event.completed;
-    saveEvents();
-    updateProgress();
-    updateStreaks();
-    render();
-    if (state.focusMode) renderFocusMode();
   }
+
+  saveEvents();
+  updateProgress();
+  updateStreaks();
+  render();
+  if (state.focusMode) renderFocusMode();
 }
 
 // ===== Rendering =====
@@ -223,12 +289,13 @@ function renderDailyObjectives(today) {
   }
 
   els.dailyObjectives.innerHTML = events.map(e => `
-    <li class="cat-${e.category}${e.completed ? ' completed' : ''}" draggable="true" data-event-id="${e.id}">
+    <li class="cat-${e.category}${e.completed ? ' completed' : ''}" draggable="true" data-event-id="${e.id}" data-event-date="${todayStr}">
       <label class="checkbox-wrapper" title="Mark ${e.completed ? 'incomplete' : 'complete'}">
-        <input type="checkbox" class="task-checkbox" data-id="${e.id}" ${e.completed ? 'checked' : ''}>
+        <input type="checkbox" class="task-checkbox" data-id="${e.id}" data-date="${todayStr}" ${e.completed ? 'checked' : ''}>
         <span class="checkmark"></span>
       </label>
       ${getPriorityIcon(e.priority)}
+      ${getRecurrenceIcon(e.recurrence)}
       ${e.time ? `<span class="event-item-time">${formatTime(e.time)}</span>` : ''}
       <span class="event-item-title">${escapeHtml(e.title)}</span>
       <button class="event-item-delete" data-id="${e.id}" title="Delete">&times;</button>
@@ -242,7 +309,7 @@ function bindObjectiveEvents(container) {
   container.querySelectorAll('.task-checkbox').forEach(cb => {
     cb.addEventListener('change', (ev) => {
       ev.stopPropagation();
-      toggleEventComplete(cb.dataset.id);
+      toggleEventComplete(cb.dataset.id, cb.dataset.date);
     });
   });
   container.querySelectorAll('.event-item-delete').forEach(btn => {
@@ -294,12 +361,13 @@ function renderHorizon(today) {
     const d = new Date(dateStr + 'T00:00:00');
     html += `<div class="horizon-date-group"><div class="horizon-date-label">${formatShortDate(d)}</div>`;
     groups[dateStr].forEach(e => {
-      html += `<li class="cat-${e.category}${e.completed ? ' completed' : ''}" draggable="true" data-event-id="${e.id}">
+      html += `<li class="cat-${e.category}${e.completed ? ' completed' : ''}" draggable="true" data-event-id="${e.id}" data-event-date="${dateStr}">
         <label class="checkbox-wrapper" title="Mark ${e.completed ? 'incomplete' : 'complete'}">
-          <input type="checkbox" class="task-checkbox" data-id="${e.id}" ${e.completed ? 'checked' : ''}>
+          <input type="checkbox" class="task-checkbox" data-id="${e.id}" data-date="${dateStr}" ${e.completed ? 'checked' : ''}>
           <span class="checkmark"></span>
         </label>
         ${getPriorityIcon(e.priority)}
+        ${getRecurrenceIcon(e.recurrence)}
         ${e.time ? `<span class="event-item-time">${formatTime(e.time)}</span>` : ''}
         <span class="event-item-title">${escapeHtml(e.title)}</span>
         <button class="event-item-delete" data-id="${e.id}" title="Delete">&times;</button>
@@ -396,7 +464,7 @@ function renderMonthView() {
     cb.addEventListener('click', (e) => e.stopPropagation());
     cb.addEventListener('change', (e) => {
       e.stopPropagation();
-      toggleEventComplete(cb.dataset.id);
+      toggleEventComplete(cb.dataset.id, cb.dataset.date);
     });
   });
 }
@@ -420,10 +488,10 @@ function buildDayCell(date, events, otherMonth, isToday) {
   sorted.slice(0, maxShow).forEach(e => {
     eventsHtml += `<div class="day-event cat-${e.category}${e.completed ? ' completed' : ''}" draggable="true" data-event-id="${e.id}">
       <label class="checkbox-mini" onclick="event.stopPropagation()">
-        <input type="checkbox" class="task-checkbox" data-id="${e.id}" ${e.completed ? 'checked' : ''}>
+        <input type="checkbox" class="task-checkbox" data-id="${e.id}" data-date="${dateStr}" ${e.completed ? 'checked' : ''}>
         <span class="checkmark-mini"></span>
       </label>
-      ${e.time ? formatTime(e.time) + ' ' : ''}${escapeHtml(e.title)}
+      ${e.recurrence && e.recurrence !== 'none' ? '<span class="recurrence-dot" title="Recurring">&#x21BB;</span>' : ''}${e.time ? formatTime(e.time) + ' ' : ''}${escapeHtml(e.title)}
     </div>`;
   });
   if (events.length > maxShow) {
@@ -464,10 +532,11 @@ function renderWeekView() {
       <div class="week-day-events">
         ${events.map(e => `<div class="week-event cat-${e.category}${e.completed ? ' completed' : ''}" draggable="true" data-event-id="${e.id}">
           <label class="checkbox-wrapper-sm" onclick="event.stopPropagation()">
-            <input type="checkbox" class="task-checkbox" data-id="${e.id}" ${e.completed ? 'checked' : ''}>
+            <input type="checkbox" class="task-checkbox" data-id="${e.id}" data-date="${dateStr}" ${e.completed ? 'checked' : ''}>
             <span class="checkmark-sm"></span>
           </label>
           ${getPriorityIcon(e.priority)}
+          ${getRecurrenceIcon(e.recurrence)}
           ${e.time ? `<span class="week-event-time">${formatTime(e.time)}</span>` : ''}
           ${escapeHtml(e.title)}
         </div>`).join('')}
@@ -520,7 +589,7 @@ function renderWeekView() {
     cb.addEventListener('click', (e) => e.stopPropagation());
     cb.addEventListener('change', (e) => {
       e.stopPropagation();
-      toggleEventComplete(cb.dataset.id);
+      toggleEventComplete(cb.dataset.id, cb.dataset.date);
     });
   });
 }
@@ -529,10 +598,18 @@ function renderWeekView() {
 function rescheduleEvent(eventId, newDate) {
   const event = state.events.find(e => e.id === eventId);
   if (event && event.date !== newDate) {
-    event.date = newDate;
-    saveEvents();
-    render();
-    addChatMessage(`Rescheduled "${event.title}" to ${formatDisplay(new Date(newDate + 'T00:00:00'))}.`, 'bot');
+    if (event.recurrence && event.recurrence !== 'none') {
+      // For recurring events, update the start date (shifts all future instances)
+      event.date = newDate;
+      saveEvents();
+      render();
+      addChatMessage(`Rescheduled recurring "${event.title}" to start from ${formatDisplay(new Date(newDate + 'T00:00:00'))}.`, 'bot');
+    } else {
+      event.date = newDate;
+      saveEvents();
+      render();
+      addChatMessage(`Rescheduled "${event.title}" to ${formatDisplay(new Date(newDate + 'T00:00:00'))}.`, 'bot');
+    }
   }
   state.draggedEvent = null;
 }
@@ -572,7 +649,7 @@ function renderFocusMode() {
   els.focusList.innerHTML = events.map(e => `
     <div class="focus-task${e.completed ? ' completed' : ''}" data-id="${e.id}">
       <label class="checkbox-wrapper focus-checkbox">
-        <input type="checkbox" class="task-checkbox" data-id="${e.id}" ${e.completed ? 'checked' : ''}>
+        <input type="checkbox" class="task-checkbox" data-id="${e.id}" data-date="${todayStr}" ${e.completed ? 'checked' : ''}>
         <span class="checkmark"></span>
       </label>
       <div class="focus-task-info">
@@ -582,6 +659,7 @@ function renderFocusMode() {
         </div>
         <div class="focus-task-meta">
           <span class="cat-badge cat-${e.category}">${e.category}</span>
+          ${e.recurrence && e.recurrence !== 'none' ? `<span class="recurrence-badge">&#x21BB; ${e.recurrence}</span>` : ''}
           ${e.time ? `<span class="focus-task-time">${formatTime(e.time)}</span>` : ''}
         </div>
       </div>
@@ -590,7 +668,7 @@ function renderFocusMode() {
 
   els.focusList.querySelectorAll('.task-checkbox').forEach(cb => {
     cb.addEventListener('change', () => {
-      toggleEventComplete(cb.dataset.id);
+      toggleEventComplete(cb.dataset.id, cb.dataset.date);
     });
   });
 }
@@ -599,6 +677,8 @@ function renderFocusMode() {
 function addEvent(event) {
   event.completed = event.completed || false;
   event.priority = event.priority || 'medium';
+  event.recurrence = event.recurrence || 'none';
+  event.completedDates = event.completedDates || [];
   state.events.push(event);
   saveEvents();
   render();
@@ -618,6 +698,7 @@ function openModal(dateStr) {
   els.eventTime.value = '';
   els.eventCategory.value = 'objective';
   els.eventPriority.value = 'medium';
+  els.eventRecurrence.value = 'none';
   els.modalTitle.textContent = 'Add Event';
   els.modalOverlay.classList.remove('hidden');
   els.eventTitle.focus();
@@ -629,8 +710,18 @@ function closeModal() {
 
 // ===== Chat Parser =====
 function parseChat(text) {
-  const result = { title: '', date: null, time: null, category: 'objective', priority: 'medium' };
+  const result = { title: '', date: null, time: null, category: 'objective', priority: 'medium', recurrence: 'none' };
   const lower = text.toLowerCase();
+
+  // Detect recurrence
+  if (lower.includes('every day') || lower.includes('everyday') || lower.match(/\bdaily\b/))
+    result.recurrence = 'daily';
+  else if (lower.includes('every week') || lower.match(/\bweekly\b/))
+    result.recurrence = 'weekly';
+  else if (lower.includes('every month') || lower.match(/\bmonthly\b/))
+    result.recurrence = 'monthly';
+  else if (lower.includes('every year') || lower.match(/\byearly\b/) || lower.match(/\bannually\b/))
+    result.recurrence = 'yearly';
 
   // Detect category
   if (lower.includes('meeting') || lower.includes('meet with') || lower.includes('call with'))
@@ -732,6 +823,7 @@ function parseChat(text) {
   title = title.replace(/\bat\s+\d{1,2}(:\d{2})?\s*(am|pm)?\b/gi, '');
   title = title.replace(/\b\d{1,2}(:\d{2})?\s*(am|pm)\b/gi, '');
   title = title.replace(/\b(urgent|important|critical|high priority|low priority|asap|not urgent|optional|whenever)\b/gi, '');
+  title = title.replace(/\b(every\s+day|everyday|daily|every\s+week|weekly|every\s+month|monthly|every\s+year|yearly|annually)\b/gi, '');
   title = title.replace(/\s{2,}/g, ' ').trim();
 
   if (title) {
@@ -755,7 +847,9 @@ function handleChat(text) {
     time: parsed.time,
     category: parsed.category,
     priority: parsed.priority,
+    recurrence: parsed.recurrence,
     completed: false,
+    completedDates: [],
   };
 
   addEvent(event);
@@ -768,8 +862,9 @@ function handleChat(text) {
     reminder: 'reminder', personal: 'personal event'
   };
   const priorityLabel = event.priority !== 'medium' ? ` [${event.priority} priority]` : '';
+  const recurrenceLabel = event.recurrence !== 'none' ? ` (repeats ${event.recurrence})` : '';
 
-  const response = `Added "${event.title}" as a ${categoryLabels[event.category]} on ${dateDisplay}${timeDisplay}${priorityLabel}.`;
+  const response = `Added "${event.title}" as a ${categoryLabels[event.category]} on ${dateDisplay}${timeDisplay}${priorityLabel}${recurrenceLabel}.`;
   addChatMessage(response, 'bot');
 
   els.chatInput.value = '';
@@ -840,7 +935,9 @@ els.eventForm.addEventListener('submit', (e) => {
     time: els.eventTime.value || null,
     category: els.eventCategory.value,
     priority: els.eventPriority.value,
+    recurrence: els.eventRecurrence.value,
     completed: false,
+    completedDates: [],
   };
   if (event.title) {
     addEvent(event);

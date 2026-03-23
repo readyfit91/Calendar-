@@ -418,6 +418,26 @@ body {
   background: rgba(59,130,246,0.15);
 }
 
+/* ===== Recurrence Badge ===== */
+.recurrence-badge {
+  font-size: 0.6rem;
+  font-weight: 600;
+  color: var(--accent-blue);
+  background: rgba(59,130,246,0.12);
+  padding: 1px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+  text-transform: capitalize;
+  flex-shrink: 0;
+}
+
+.recurrence-dot {
+  font-size: 0.6rem;
+  color: var(--accent-blue);
+  margin-right: 1px;
+  flex-shrink: 0;
+}
+
 /* Category colors */
 .cat-meeting { border-left-color: var(--accent-blue) !important; }
 .cat-deadline { border-left-color: var(--accent-red) !important; }
