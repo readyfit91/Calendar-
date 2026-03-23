@@ -4,6 +4,31 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 const { createClient } = window.supabase;
 const db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+// ===== Sync Status Indicator =====
+let _syncStatusTimer = null;
+function showSyncStatus(status) {
+  let el = document.getElementById('sync-status');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'sync-status';
+    el.style.cssText = 'position:fixed;top:8px;right:8px;padding:4px 10px;border-radius:12px;font-size:12px;z-index:9999;transition:opacity 0.3s;pointer-events:none;';
+    document.body.appendChild(el);
+  }
+  if (_syncStatusTimer) clearTimeout(_syncStatusTimer);
+  if (status === 'syncing') {
+    el.textContent = 'Syncing...';
+    el.style.background = '#fbbf24'; el.style.color = '#000'; el.style.opacity = '1';
+  } else if (status === 'saved') {
+    el.textContent = 'Saved';
+    el.style.background = '#34d399'; el.style.color = '#000'; el.style.opacity = '1';
+    _syncStatusTimer = setTimeout(() => { el.style.opacity = '0'; }, 1500);
+  } else if (status === 'error') {
+    el.textContent = 'Sync failed';
+    el.style.background = '#f87171'; el.style.color = '#fff'; el.style.opacity = '1';
+    _syncStatusTimer = setTimeout(() => { el.style.opacity = '0'; }, 3000);
+  }
+}
+
 // ===== State =====
 const state = {
   events: [],
@@ -232,14 +257,13 @@ function getRecurrenceIcon(recurrence, recurrenceEnd) {
 
 let _syncTimer = null;
 function saveEventsLocal() {
-  // Save to localStorage only (used by realtime handlers to avoid sync loops)
   localStorage.setItem('calendarEvents', JSON.stringify(state.events));
 }
 
-async function saveEvents() {
-  // Save locally + sync to Supabase so other devices see changes immediately
+// saveEvents = localStorage only. Supabase sync happens via explicit
+// syncEventToSupabase / deleteEventFromSupabase calls at each call site.
+function saveEvents() {
   saveEventsLocal();
-  await _syncToSupabase();
 }
 
 async function _syncToSupabase() {
@@ -327,21 +351,35 @@ function rowToEvent(row) {
 
 async function syncEventToSupabase(event) {
   if (!state.user) return;
+  showSyncStatus('syncing');
   try {
     const { error } = await db.from('calendar_events').upsert(eventToRow(event));
-    if (error) console.error('syncEvent error:', error.message);
+    if (error) {
+      console.error('syncEvent error:', error.message);
+      showSyncStatus('error');
+    } else {
+      showSyncStatus('saved');
+    }
   } catch (err) {
     console.error('syncEvent failed:', err.message);
+    showSyncStatus('error');
   }
 }
 
 async function deleteEventFromSupabase(id) {
   if (!state.user) return;
+  showSyncStatus('syncing');
   try {
     const { error } = await db.from('calendar_events').delete().eq('id', id).eq('user_id', state.user.id);
-    if (error) console.error('deleteEvent error:', error.message);
+    if (error) {
+      console.error('deleteEvent error:', error.message);
+      showSyncStatus('error');
+    } else {
+      showSyncStatus('saved');
+    }
   } catch (err) {
     console.error('deleteEvent failed:', err.message);
+    showSyncStatus('error');
   }
 }
 
@@ -2184,6 +2222,7 @@ async function initApp(user) {
       try {
         await loadFromSupabase();
         render();
+        if (state.focusMode) renderFocusMode();
       } catch (e) { /* offline, use cached */ }
     }
   });
