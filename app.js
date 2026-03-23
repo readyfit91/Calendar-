@@ -757,7 +757,7 @@ function buildDayCell(date, events, otherMonth, isToday) {
         <input type="checkbox" class="task-checkbox" data-id="${e.id}" data-date="${dateStr}" ${e.completed ? 'checked' : ''}>
         <span class="checkmark-mini"></span>
       </label>
-      ${e.recurrence && e.recurrence !== 'none' ? '<span class="recurrence-dot" title="Recurring">&#x21BB;</span>' : ''}${e.time ? formatTime(e.time) + ' ' : ''}${escapeHtml(e.title)}
+      <span class="day-event-text">${e.recurrence && e.recurrence !== 'none' ? '<span class="recurrence-dot" title="Recurring">&#x21BB;</span>' : ''}${e.time ? formatTime(e.time) + ' ' : ''}${escapeHtml(e.title)}</span>
       <button class="day-event-delete" data-id="${e.id}" title="Delete">&times;</button>
     </div>`;
   });
@@ -804,8 +804,7 @@ function renderWeekView() {
           </label>
           ${getPriorityIcon(e.priority)}
           ${getRecurrenceIcon(e.recurrence, e.recurrenceEnd)}
-          ${e.time ? `<span class="week-event-time">${formatTimeRange(e.time, e.endTime)}</span>` : ''}
-          ${escapeHtml(e.title)}
+          <span class="day-event-text">${e.time ? `<span class="week-event-time">${formatTimeRange(e.time, e.endTime)}</span>` : ''}${escapeHtml(e.title)}</span>
           <button class="day-event-delete" data-id="${e.id}" title="Delete">&times;</button>
         </div>`).join('')}
       </div>

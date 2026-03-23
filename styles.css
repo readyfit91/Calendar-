@@ -821,8 +821,6 @@ body {
   padding: 2px 4px;
   border-radius: 3px;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
   cursor: grab;
   display: flex;
   align-items: center;
@@ -830,6 +828,12 @@ body {
   min-width: 0;
   max-width: 100%;
   transition: opacity 0.2s;
+}
+.day-event-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+  flex: 1;
 }
 
 .day-event.completed {
