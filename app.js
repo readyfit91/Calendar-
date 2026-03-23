@@ -535,8 +535,8 @@ function renderBirthdayCountdown(today) {
     const diffMs = nextOccurrence.getTime() - todayTime;
     const daysUntil = Math.round(diffMs / (1000 * 60 * 60 * 24));
     return { ...e, nextOccurrence, daysUntil };
-  }).filter(b => b.daysUntil <= 30)
-    .sort((a, b) => a.daysUntil - b.daysUntil);
+  }).sort((a, b) => a.daysUntil - b.daysUntil)
+    .slice(0, 4);
 
   if (birthdays.length === 0) {
     els.birthdayMarquee.classList.add('hidden');
