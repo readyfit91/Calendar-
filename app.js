@@ -982,6 +982,10 @@ function parseChat(text) {
   else if (lower.includes('every year') || lower.match(/\byearly\b/) || lower.match(/\bannually\b/))
     result.recurrence = 'yearly';
 
+  // Birthdays automatically recur yearly
+  if (lower.includes('birthday') && result.recurrence === 'none')
+    result.recurrence = 'yearly';
+
   // Detect category
   if (lower.includes('meeting') || lower.includes('meet with') || lower.includes('call with'))
     result.category = 'meeting';
@@ -1335,6 +1339,15 @@ els.weekTab.addEventListener('click', () => {
 els.chatSend.addEventListener('click', () => handleChat(els.chatInput.value));
 els.chatInput.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') handleChat(els.chatInput.value);
+});
+
+// On mobile, scroll chat input into view when keyboard opens
+els.chatInput.addEventListener('focus', () => {
+  if (window.innerWidth <= 900) {
+    setTimeout(() => {
+      els.chatInput.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }, 350);
+  }
 });
 
 els.eventForm.addEventListener('submit', (e) => {

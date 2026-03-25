@@ -1565,6 +1565,7 @@ body {
     width: 100%;
     min-width: unset;
     max-height: none;
+    overflow-y: visible;
     padding: 12px;
     border-right: none !important;
     border-left: none !important;
@@ -1574,6 +1575,23 @@ body {
   .sidebar:last-child {
     border-bottom: none;
     border-top: 1px solid var(--border);
+  }
+
+  .birthday-section {
+    margin-top: 16px;
+  }
+
+  .birthday-card {
+    padding: 8px 10px;
+    gap: 8px;
+  }
+
+  .birthday-name {
+    font-size: 0.78rem;
+  }
+
+  .birthday-icon {
+    font-size: 1rem;
   }
 
   .sidebar h2 {
@@ -1687,6 +1705,7 @@ body {
   .chatbox {
     height: auto;
     min-height: 100px;
+    scroll-margin-bottom: 16px;
   }
 
   .chat-messages {
@@ -1709,6 +1728,7 @@ body {
   #chatInput {
     padding: 8px 12px;
     font-size: 0.85rem;
+    scroll-margin-bottom: 16px;
   }
 
   #chatSend {
