@@ -67,6 +67,11 @@ function dequeueDelete(id) {
 
 async function flushPendingQueue() {
   if (!state.user) return;
+  if (_pendingSyncs.length === 0 && _pendingDeletes.length === 0) return;
+
+  // Refresh session once before flushing the queue
+  try { await db.auth.getSession(); } catch { /* continue */ }
+
   // Flush pending syncs
   const syncs = [..._pendingSyncs];
   for (const event of syncs) {
@@ -74,7 +79,8 @@ async function flushPendingQueue() {
       const row = eventToRow(event);
       const { error } = await db.from('calendar_events').upsert(row, { onConflict: 'id' });
       if (!error) dequeueSync(event.id);
-    } catch { /* will retry next time */ }
+      else console.error('flushPendingQueue sync error:', error.message);
+    } catch (err) { console.error('flushPendingQueue sync exception:', err.message); }
   }
   // Flush pending deletes
   const deletes = [..._pendingDeletes];
@@ -82,7 +88,8 @@ async function flushPendingQueue() {
     try {
       const { error } = await db.from('calendar_events').delete().eq('id', id).eq('user_id', state.user.id);
       if (!error) dequeueDelete(id);
-    } catch { /* will retry next time */ }
+      else console.error('flushPendingQueue delete error:', error.message);
+    } catch (err) { console.error('flushPendingQueue delete exception:', err.message); }
   }
 }
 
@@ -443,23 +450,32 @@ async function syncEventToSupabase(event) {
   showSyncStatus('syncing');
   // Always queue first so it persists even if the page is killed
   queueSync(event);
-  try {
-    const row = eventToRow(event);
-    const { error } = await db.from('calendar_events').upsert(row, { onConflict: 'id' });
-    if (error) {
-      console.error('syncEvent error:', error);
-      showSyncStatus(`Sync error: ${error.message}`);
-      return false;
-    } else {
-      dequeueSync(event.id);
-      showSyncStatus('saved');
-      return true;
+
+  // Refresh auth session before attempting sync (handles expired tokens on iOS)
+  try { await db.auth.getSession(); } catch { /* continue anyway */ }
+
+  // Retry up to 3 times with exponential backoff
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if (attempt > 0) await new Promise(r => setTimeout(r, attempt * 1000));
+    try {
+      const row = eventToRow(event);
+      const { error } = await db.from('calendar_events').upsert(row, { onConflict: 'id' });
+      if (!error) {
+        dequeueSync(event.id);
+        showSyncStatus('saved');
+        return true;
+      }
+      // Auth error — try refreshing session and retry
+      if (error.code === 'PGRST301' || error.message?.includes('JWT') || error.message?.includes('auth')) {
+        try { await db.auth.refreshSession(); } catch { /* continue */ }
+      }
+      console.error(`syncEvent attempt ${attempt + 1} failed:`, error.message);
+    } catch (err) {
+      console.error(`syncEvent attempt ${attempt + 1} exception:`, err.message);
     }
-  } catch (err) {
-    console.error('syncEvent exception:', err);
-    showSyncStatus(`Sync error: ${err.message}`);
-    return false;
   }
+  showSyncStatus('Sync error — will retry when online');
+  return false;
 }
 
 async function deleteEventFromSupabase(id) {
@@ -2368,20 +2384,26 @@ async function initApp(user) {
   // Start real-time sync for cross-device updates
   startRealtimeSync();
 
-  // Auto-save to Supabase every 30 seconds + flush pending queue
+  // Flush pending queue every 5 seconds (catches mobile failures quickly)
+  if (window._pendingFlushInterval) clearInterval(window._pendingFlushInterval);
+  window._pendingFlushInterval = setInterval(() => {
+    flushPendingQueue();
+  }, 5000);
+
+  // Full re-sync every 30 seconds
   if (window._autoSaveInterval) clearInterval(window._autoSaveInterval);
   window._autoSaveInterval = setInterval(() => {
-    flushPendingQueue();
     _syncToSupabase();
     _cleanupDeletedEvents();
     saveStreaks();
   }, 30000);
 
-  // Re-fetch from Supabase when tab regains focus (covers phone switching back)
-  // Also flush any pending syncs that failed while the page was backgrounded
+  // Re-fetch and flush when the app comes back to foreground (phone/iPad app switch)
   document.addEventListener('visibilitychange', async () => {
     if (document.visibilityState === 'visible' && state.user) {
       try {
+        // Refresh auth token first — it may have expired while backgrounded
+        await db.auth.getSession();
         await flushPendingQueue();
         await loadFromSupabase();
         render();
@@ -2448,6 +2470,7 @@ authEls.signUp.addEventListener('click', async () => {
 authEls.signOutBtn.addEventListener('click', async () => {
   stopRealtimeSync();
   if (window._autoSaveInterval) clearInterval(window._autoSaveInterval);
+  if (window._pendingFlushInterval) clearInterval(window._pendingFlushInterval);
   await db.auth.signOut();
   state.user = null;
   state.events = [];
