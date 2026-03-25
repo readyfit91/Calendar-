@@ -251,6 +251,27 @@ async function loadFromSupabase() {
   }
 }
 
+// One-time migration: set yearly recurrence on existing birthday events
+async function migrateBirthdayRecurrence() {
+  const toUpdate = state.events.filter(e =>
+    e.title.toLowerCase().includes('birthday') &&
+    (!e.recurrence || e.recurrence === 'none')
+  );
+  if (toUpdate.length === 0) return;
+
+  toUpdate.forEach(e => { e.recurrence = 'yearly'; });
+  localStorage.setItem('calendarEvents', JSON.stringify(state.events));
+
+  if (state.user) {
+    for (const e of toUpdate) {
+      await db.from('calendar_events')
+        .update({ recurrence: 'yearly' })
+        .eq('id', e.id)
+        .eq('user_id', state.user.id);
+    }
+  }
+}
+
 // Migrate localStorage data to Supabase for first-time users
 async function migrateLocalToSupabase() {
   if (!state.user) return;
@@ -1490,6 +1511,8 @@ async function initApp(user) {
     }));
     state.streaks = JSON.parse(localStorage.getItem('calendarStreaks') || '{"current":0,"best":0,"lastCompletedDate":null}');
   }
+
+  await migrateBirthdayRecurrence();
 
   showApp();
   render();
