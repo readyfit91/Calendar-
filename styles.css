@@ -6,21 +6,21 @@
 }
 
 :root {
-  --bg: #0f1117;
-  --surface: #1a1d27;
-  --surface-2: #242835;
-  --border: #2e3345;
-  --text: #e4e6f0;
-  --text-muted: #8b8fa3;
-  --primary: #6c63ff;
-  --primary-hover: #7f78ff;
-  --accent-green: #22c55e;
-  --accent-orange: #f59e0b;
-  --accent-red: #ef4444;
-  --accent-blue: #3b82f6;
-  --accent-purple: #a855f7;
+  --bg: #0d1a14;
+  --surface: #162318;
+  --surface-2: #1c2d22;
+  --border: #2a4035;
+  --text: #e4ede6;
+  --text-muted: #7a9e85;
+  --primary: #6b9b74;
+  --primary-hover: #7db887;
+  --accent-green: #4a9e5c;
+  --accent-orange: #c8a84b;
+  --accent-red: #d45070;
+  --accent-blue: #5a8eaa;
+  --accent-purple: #9a7baa;
   --radius: 8px;
-  --shadow: 0 4px 24px rgba(0,0,0,0.3);
+  --shadow: 0 4px 24px rgba(0,0,0,0.4);
 }
 
 body {
@@ -685,6 +685,67 @@ body {
 .birthday-today .birthday-countdown {
   color: var(--accent-green);
 }
+
+/* ===== Floating Event Banner ===== */
+.event-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 16px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+  scrollbar-width: none;
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  flex-shrink: 0;
+}
+
+.event-banner::-webkit-scrollbar { display: none; }
+
+.banner-label {
+  font-size: 1rem;
+  flex-shrink: 0;
+}
+
+.event-banner-inner {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  min-width: max-content;
+}
+
+.banner-card {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  background: var(--surface-2);
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  white-space: nowrap;
+  font-size: 0.78rem;
+  transition: background 0.15s;
+}
+
+.banner-card.banner-today {
+  border-color: var(--accent-green);
+  background: rgba(74, 158, 92, 0.15);
+}
+
+.banner-card.banner-soon {
+  border-color: var(--accent-orange);
+}
+
+.banner-icon { font-size: 0.9rem; }
+.banner-name { font-weight: 500; color: var(--text); }
+.banner-countdown {
+  color: var(--accent-orange);
+  font-weight: 700;
+  font-size: 0.72rem;
+}
+.banner-card.banner-today .banner-countdown { color: var(--accent-green); }
 
 /* ===== Calendar Container ===== */
 .calendar-container {

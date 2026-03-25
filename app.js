@@ -49,6 +49,8 @@ const els = {
   eventRecurrenceEnd: $('#eventRecurrenceEnd'),
   recurrenceEndRow: $('#recurrenceEndRow'),
   birthdayList: $('#birthdayList'),
+  eventBanner: $('#eventBanner'),
+  eventBannerInner: $('#eventBannerInner'),
   conflictOverlay: $('#conflictOverlay'),
   conflictMessage: $('#conflictMessage'),
   conflictExisting: $('#conflictExisting'),
@@ -253,8 +255,9 @@ async function loadFromSupabase() {
 
 // One-time migration: set yearly recurrence on existing birthday events
 async function migrateBirthdayRecurrence() {
+  const keywords = ['birthday', 'anniversary', 'bday'];
   const toUpdate = state.events.filter(e =>
-    e.title.toLowerCase().includes('birthday') &&
+    keywords.some(kw => e.title.toLowerCase().includes(kw)) &&
     (!e.recurrence || e.recurrence === 'none')
   );
   if (toUpdate.length === 0) return;
@@ -534,22 +537,23 @@ function renderHorizon(today) {
 }
 
 function renderBirthdayCountdown(today) {
-  // Find all events with "birthday" in the title
+  // Find all events with "birthday", "anniversary", "bday" etc. in the title
+  const keywords = ['birthday', 'anniversary', 'bday', 'born'];
   const birthdayEvents = state.events.filter(e =>
-    e.title.toLowerCase().includes('birthday')
+    keywords.some(kw => e.title.toLowerCase().includes(kw))
   );
 
   if (birthdayEvents.length === 0) {
-    els.birthdayList.innerHTML = '<div class="empty-state">No birthdays tracked yet. Add events with "birthday" in the title!</div>';
+    els.birthdayList.innerHTML = '<div class="empty-state">No birthdays tracked yet. Add events with "birthday" or "anniversary" in the title!</div>';
+    els.eventBanner.classList.add('hidden');
     return;
   }
 
   const todayTime = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
 
-  // Calculate next occurrence and days until for each birthday
+  // Calculate next occurrence and days until for each event
   const birthdays = birthdayEvents.map(e => {
     const eventDate = new Date(e.date + 'T00:00:00');
-    // Find the next occurrence this year or next
     let nextOccurrence = new Date(today.getFullYear(), eventDate.getMonth(), eventDate.getDate());
     if (nextOccurrence.getTime() < todayTime) {
       nextOccurrence = new Date(today.getFullYear() + 1, eventDate.getMonth(), eventDate.getDate());
@@ -559,33 +563,48 @@ function renderBirthdayCountdown(today) {
     return { ...e, nextOccurrence, daysUntil };
   }).sort((a, b) => a.daysUntil - b.daysUntil);
 
+  function countdownText(daysUntil) {
+    if (daysUntil === 0) return 'Today!';
+    if (daysUntil === 1) return 'Tomorrow!';
+    if (daysUntil <= 30) return `${daysUntil} days`;
+    const weeks = Math.floor(daysUntil / 7);
+    return `${weeks}w away`;
+  }
+
+  function eventIcon(e, isToday) {
+    const lower = e.title.toLowerCase();
+    if (lower.includes('anniversary')) return isToday ? '&#x1F496;' : '&#x1F48D;';
+    return isToday ? '&#x1F382;' : '&#x1F381;';
+  }
+
+  // Render sidebar list
   els.birthdayList.innerHTML = birthdays.map(b => {
     const isToday = b.daysUntil === 0;
-    const isTomorrow = b.daysUntil === 1;
     const isThisWeek = b.daysUntil <= 7;
-
-    let countdownText;
-    if (isToday) countdownText = 'Today!';
-    else if (isTomorrow) countdownText = 'Tomorrow!';
-    else if (isThisWeek) countdownText = `${b.daysUntil} days away`;
-    else if (b.daysUntil <= 30) countdownText = `${b.daysUntil} days away`;
-    else {
-      const weeks = Math.floor(b.daysUntil / 7);
-      countdownText = `${weeks} week${weeks > 1 ? 's' : ''} away`;
-    }
-
     const urgencyClass = isToday ? 'birthday-today' : isThisWeek ? 'birthday-soon' : '';
     const dateLabel = formatShortDate(b.nextOccurrence);
-
     return `<div class="birthday-card ${urgencyClass}">
-      <div class="birthday-icon">${isToday ? '&#x1F382;' : '&#x1F381;'}</div>
+      <div class="birthday-icon">${eventIcon(b, isToday)}</div>
       <div class="birthday-info">
         <div class="birthday-name">${escapeHtml(b.title)}</div>
         <div class="birthday-date">${dateLabel}</div>
       </div>
-      <div class="birthday-countdown">${countdownText}</div>
+      <div class="birthday-countdown">${countdownText(b.daysUntil)}</div>
     </div>`;
   }).join('');
+
+  // Render floating top banner
+  els.eventBannerInner.innerHTML = birthdays.map(b => {
+    const isToday = b.daysUntil === 0;
+    const isThisWeek = b.daysUntil <= 7;
+    const urgencyClass = isToday ? 'banner-today' : isThisWeek ? 'banner-soon' : '';
+    return `<div class="banner-card ${urgencyClass}">
+      <span class="banner-icon">${eventIcon(b, isToday)}</span>
+      <span class="banner-name">${escapeHtml(b.title)}</span>
+      <span class="banner-countdown">${countdownText(b.daysUntil)}</span>
+    </div>`;
+  }).join('');
+  els.eventBanner.classList.remove('hidden');
 }
 
 function renderMonthView() {
@@ -1003,8 +1022,8 @@ function parseChat(text) {
   else if (lower.includes('every year') || lower.match(/\byearly\b/) || lower.match(/\bannually\b/))
     result.recurrence = 'yearly';
 
-  // Birthdays automatically recur yearly
-  if (lower.includes('birthday') && result.recurrence === 'none')
+  // Birthdays and anniversaries automatically recur yearly
+  if ((lower.includes('birthday') || lower.includes('anniversary') || lower.includes('bday')) && result.recurrence === 'none')
     result.recurrence = 'yearly';
 
   // Detect category
@@ -1015,8 +1034,8 @@ function parseChat(text) {
   else if (lower.includes('remind') || lower.includes('remember') || lower.includes("don't forget"))
     result.category = 'reminder';
   else if (lower.includes('gym') || lower.includes('workout') || lower.includes('dinner') ||
-           lower.includes('lunch') || lower.includes('birthday') || lower.includes('party') ||
-           lower.includes('doctor') || lower.includes('dentist') || lower.includes('haircut'))
+           lower.includes('lunch') || lower.includes('birthday') || lower.includes('anniversary') ||
+           lower.includes('party') || lower.includes('doctor') || lower.includes('dentist') || lower.includes('haircut'))
     result.category = 'personal';
 
   // Detect priority
