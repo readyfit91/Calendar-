@@ -166,9 +166,7 @@ async function saveEvents() {
   // Sync all events to Supabase for cross-device persistence
   if (state.user) {
     const rows = state.events.map(e => eventToRow(e));
-    const { error } = await db.from('calendar_events')
-      .upsert(rows)
-      .eq('user_id', state.user.id);
+    const { error } = await db.from('calendar_events').upsert(rows);
     if (error) console.error('Failed to sync events to Supabase:', error);
   }
 }
