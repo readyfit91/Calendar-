@@ -161,8 +161,14 @@ function getRecurrenceIcon(recurrence, recurrenceEnd) {
 }
 
 async function saveEvents() {
-  // Also keep localStorage as offline fallback
+  // Keep localStorage as offline fallback
   localStorage.setItem('calendarEvents', JSON.stringify(state.events));
+  // Sync all events to Supabase for cross-device persistence
+  if (state.user) {
+    const rows = state.events.map(e => eventToRow(e));
+    const { error } = await db.from('calendar_events').upsert(rows);
+    if (error) console.error('Failed to sync events to Supabase:', error);
+  }
 }
 
 async function saveStreaks() {
@@ -199,12 +205,12 @@ function rowToEvent(row) {
   return {
     id: row.id,
     title: row.title,
-    date: row.date,
+    date: row.date ? String(row.date).slice(0, 10) : row.date,
     time: row.time,
     category: row.category,
     priority: row.priority,
     recurrence: row.recurrence,
-    recurrenceEnd: row.recurrence_end,
+    recurrenceEnd: row.recurrence_end ? String(row.recurrence_end).slice(0, 10) : null,
     completed: row.completed,
     completedDates: row.completed_dates || [],
   };
@@ -212,19 +218,21 @@ function rowToEvent(row) {
 
 async function syncEventToSupabase(event) {
   if (!state.user) return;
-  await db.from('calendar_events').upsert(eventToRow(event));
+  const { error } = await db.from('calendar_events').upsert(eventToRow(event));
+  if (error) console.error('Failed to sync event to Supabase:', error);
 }
 
 async function deleteEventFromSupabase(id) {
   if (!state.user) return;
-  await db.from('calendar_events').delete().eq('id', id);
+  const { error } = await db.from('calendar_events').delete().eq('id', id);
+  if (error) console.error('Failed to delete event from Supabase:', error);
 }
 
 async function loadFromSupabase() {
   if (!state.user) return;
 
   // Load events
-  const { data: events } = await supabase
+  const { data: events } = await db
     .from('calendar_events')
     .select('*')
     .eq('user_id', state.user.id);
@@ -235,7 +243,7 @@ async function loadFromSupabase() {
   }
 
   // Load streaks
-  const { data: streaks } = await supabase
+  const { data: streaks } = await db
     .from('calendar_streaks')
     .select('*')
     .eq('user_id', state.user.id)
@@ -255,7 +263,7 @@ async function loadFromSupabase() {
 async function migrateLocalToSupabase() {
   if (!state.user) return;
 
-  const { data: existing } = await supabase
+  const { data: existing } = await db
     .from('calendar_events')
     .select('id')
     .eq('user_id', state.user.id)
@@ -935,14 +943,14 @@ function addEvent(event) {
   event.recurrenceEnd = event.recurrenceEnd || null;
   event.completedDates = event.completedDates || [];
   state.events.push(event);
-  saveEvents();
+  localStorage.setItem('calendarEvents', JSON.stringify(state.events));
   syncEventToSupabase(event);
   render();
 }
 
 function deleteEvent(id) {
   state.events = state.events.filter(e => e.id !== id);
-  saveEvents();
+  localStorage.setItem('calendarEvents', JSON.stringify(state.events));
   deleteEventFromSupabase(id);
   render();
   if (state.focusMode) renderFocusMode();
