@@ -161,8 +161,16 @@ function getRecurrenceIcon(recurrence, recurrenceEnd) {
 }
 
 async function saveEvents() {
-  // Also keep localStorage as offline fallback
+  // Keep localStorage as offline fallback
   localStorage.setItem('calendarEvents', JSON.stringify(state.events));
+  // Sync all events to Supabase for cross-device persistence
+  if (state.user) {
+    const rows = state.events.map(e => eventToRow(e));
+    const { error } = await db.from('calendar_events')
+      .upsert(rows)
+      .eq('user_id', state.user.id);
+    if (error) console.error('Failed to sync events to Supabase:', error);
+  }
 }
 
 async function saveStreaks() {
@@ -212,19 +220,21 @@ function rowToEvent(row) {
 
 async function syncEventToSupabase(event) {
   if (!state.user) return;
-  await db.from('calendar_events').upsert(eventToRow(event));
+  const { error } = await db.from('calendar_events').upsert(eventToRow(event));
+  if (error) console.error('Failed to sync event to Supabase:', error);
 }
 
 async function deleteEventFromSupabase(id) {
   if (!state.user) return;
-  await db.from('calendar_events').delete().eq('id', id);
+  const { error } = await db.from('calendar_events').delete().eq('id', id);
+  if (error) console.error('Failed to delete event from Supabase:', error);
 }
 
 async function loadFromSupabase() {
   if (!state.user) return;
 
   // Load events
-  const { data: events } = await supabase
+  const { data: events } = await db
     .from('calendar_events')
     .select('*')
     .eq('user_id', state.user.id);
@@ -235,7 +245,7 @@ async function loadFromSupabase() {
   }
 
   // Load streaks
-  const { data: streaks } = await supabase
+  const { data: streaks } = await db
     .from('calendar_streaks')
     .select('*')
     .eq('user_id', state.user.id)
@@ -255,7 +265,7 @@ async function loadFromSupabase() {
 async function migrateLocalToSupabase() {
   if (!state.user) return;
 
-  const { data: existing } = await supabase
+  const { data: existing } = await db
     .from('calendar_events')
     .select('id')
     .eq('user_id', state.user.id)
