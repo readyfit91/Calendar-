@@ -205,12 +205,12 @@ function rowToEvent(row) {
   return {
     id: row.id,
     title: row.title,
-    date: row.date,
+    date: row.date ? String(row.date).slice(0, 10) : row.date,
     time: row.time,
     category: row.category,
     priority: row.priority,
     recurrence: row.recurrence,
-    recurrenceEnd: row.recurrence_end,
+    recurrenceEnd: row.recurrence_end ? String(row.recurrence_end).slice(0, 10) : null,
     completed: row.completed,
     completedDates: row.completed_dates || [],
   };
@@ -943,14 +943,14 @@ function addEvent(event) {
   event.recurrenceEnd = event.recurrenceEnd || null;
   event.completedDates = event.completedDates || [];
   state.events.push(event);
-  saveEvents();
+  localStorage.setItem('calendarEvents', JSON.stringify(state.events));
   syncEventToSupabase(event);
   render();
 }
 
 function deleteEvent(id) {
   state.events = state.events.filter(e => e.id !== id);
-  saveEvents();
+  localStorage.setItem('calendarEvents', JSON.stringify(state.events));
   deleteEventFromSupabase(id);
   render();
   if (state.focusMode) renderFocusMode();
