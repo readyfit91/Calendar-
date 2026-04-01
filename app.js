@@ -240,7 +240,24 @@ async function loadFromSupabase() {
   if (eventsError) throw eventsError;
 
   if (events) {
-    state.events = events.map(rowToEvent);
+    const cloudEvents = events.map(rowToEvent);
+    const cloudIds = new Set(cloudEvents.map(e => e.id));
+
+    // Recover any locally-saved events that never made it to Supabase
+    const localEvents = JSON.parse(localStorage.getItem('calendarEvents') || '[]');
+    const unsynced = localEvents.filter(e => e.id && !cloudIds.has(e.id));
+
+    state.events = cloudEvents;
+
+    if (unsynced.length > 0) {
+      state.events = [...cloudEvents, ...unsynced];
+      // Push recovered events up to Supabase so they aren't lost again
+      const rows = unsynced.map(e => eventToRow(e));
+      db.from('calendar_events').upsert(rows).then(({ error }) => {
+        if (error) console.error('Failed to recover unsynced events:', error);
+      });
+    }
+
     localStorage.setItem('calendarEvents', JSON.stringify(state.events));
   }
 
@@ -1287,7 +1304,8 @@ function handleChat(text) {
     completedDates: [],
   };
 
-  addEventWithConflictCheck(event, 'chat');
+  // Skip conflict dialog for chat — just add directly so nothing is silently dropped
+  commitAddEvent(event, 'chat');
 }
 
 function addChatMessage(text, type) {
