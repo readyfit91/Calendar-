@@ -232,10 +232,12 @@ async function loadFromSupabase() {
   if (!state.user) return;
 
   // Load events
-  const { data: events } = await db
+  const { data: events, error: eventsError } = await db
     .from('calendar_events')
     .select('*')
     .eq('user_id', state.user.id);
+
+  if (eventsError) throw eventsError;
 
   if (events) {
     state.events = events.map(rowToEvent);
@@ -243,11 +245,14 @@ async function loadFromSupabase() {
   }
 
   // Load streaks
-  const { data: streaks } = await db
+  const { data: streaks, error: streaksError } = await db
     .from('calendar_streaks')
     .select('*')
     .eq('user_id', state.user.id)
     .single();
+
+  // Ignore "no rows" error (PGRST116) — user just has no streaks yet
+  if (streaksError && streaksError.code !== 'PGRST116') throw streaksError;
 
   if (streaks) {
     state.streaks = {
@@ -389,7 +394,7 @@ function toggleEventComplete(id, dateStr) {
     event.completed = !event.completed;
   }
 
-  saveEvents();
+  localStorage.setItem('calendarEvents', JSON.stringify(state.events));
   syncEventToSupabase(event);
   updateProgress();
   updateStreaks();
@@ -793,17 +798,13 @@ function renderWeekView() {
 function rescheduleEvent(eventId, newDate) {
   const event = state.events.find(e => e.id === eventId);
   if (event && event.date !== newDate) {
+    event.date = newDate;
+    localStorage.setItem('calendarEvents', JSON.stringify(state.events));
+    syncEventToSupabase(event);
+    render();
     if (event.recurrence && event.recurrence !== 'none') {
-      event.date = newDate;
-      saveEvents();
-      syncEventToSupabase(event);
-      render();
       addChatMessage(`Rescheduled recurring "${event.title}" to start from ${formatDisplay(new Date(newDate + 'T00:00:00'))}.`, 'bot');
     } else {
-      event.date = newDate;
-      saveEvents();
-      syncEventToSupabase(event);
-      render();
       addChatMessage(`Rescheduled "${event.title}" to ${formatDisplay(new Date(newDate + 'T00:00:00'))}.`, 'bot');
     }
   }
@@ -1548,3 +1549,17 @@ authEls.signOutBtn.addEventListener('click', async () => {
     showAuth();
   }
 })();
+
+// ===== Keep Auth State in Sync =====
+// Handles token refresh and sign-out events so Supabase calls never silently fail
+db.auth.onAuthStateChange(async (event, session) => {
+  if (event === 'TOKEN_REFRESHED' && session?.user) {
+    // Update user reference so subsequent Supabase calls use the refreshed token
+    state.user = session.user;
+  } else if (event === 'SIGNED_OUT') {
+    state.user = null;
+    state.events = [];
+    state.streaks = { current: 0, best: 0, lastCompletedDate: null };
+    showAuth();
+  }
+});
